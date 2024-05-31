@@ -18,7 +18,7 @@ b_shape,"shape of the blue monster's head (-1 = hidden, 1 = square, 2 = circle)"
 b_legs,"number of legs of the blue monster (-1 = hidden, 1, 2, 3)"
 p_shape,"shape of the purple monster's head (-1 = hidden, 1 = square, 2 = circle)"
 p_legs,"number of legs of the purple monster (-1 = hidden, 1, 2, 3)"
-question,asked question
+question,"asked question. Note: this includes some amount of pre-cleaning, e.g., removing anything that was said before/after the child's asked question. However, we did not correct grammatical errors."
 question_standard,standardized text version of question (used for text-based similarity measure)
 question_program,question program translation
 question_abstracted_idealized,"question program translation, abstracting away free parameters"
