@@ -96,4 +96,3 @@ dependencies:
       - transformers==4.41.1
       - urllib3==2.2.1
       - zss==1.2.0
-prefix: /Users/emilyliquin/miniconda3/envs/dqashare
