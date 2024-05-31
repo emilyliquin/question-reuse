@@ -1,0 +1,33 @@
+﻿id,participant id number
+trial,"question asking task trial number (1-4, in order)"
+AgeGroup,age group (Kids or Adults)
+AgeGroup_Split,"Age group, split into bins within children (5- to 6-year-olds, 7- to 8-year-olds, 9- to 10-year-olds, adults)"
+age_yr,age in years (for children only)
+age_mo,age in months (for children only)
+age_mo_center,"age in months, mean-centered (for children only)"
+n_attempts_color,"in initial task intro, how many attempts total to identify monsters of particular color (e.g., ""Can you click on the purple monster?""). Three total trials, so 3 attempts is perfect performance. Numbers greater than 3 indicate errors. Participants could make an error twice on each trial before being forced to select the correct response, so max score is 9 (three attempts on each trial, where the last attempt is a forced correct response)."
+n_attempts_head,"in initial task intro, how many attempts total to identify monsters of particular head shape (e.g., ""Can you click on the monster with a circle head?""). Two total trials, so 2 attempts is perfect performance. Numbers greater than 2 indicate errors. Participants could make an error twice on each trial before being forced to select the correct response, so max score is 6 (three attempts on each trial, where the last attempt is a forced correct response)."
+n_attempts_legs,"in initial task intro, how many attempts total to identify monsters with particular number of legs (e.g., ""Can you click on the monster with two legs?""). Three total trials, so 3 attempts is perfect performance. Numbers greater than 3 indicate errors. Participants could make an error twice on each trial before being forced to select the correct response, so max score is 9 (three attempts on each trial, where the last attempt is a forced correct response)."
+trial_index,unique trial type -- ranges from 1-14. Each trial type defines a unique hint
+hint_a,"hint for the first monster (left) -- first is color (r=red, b=blue, p=purple), second is head shape (sq=square, cir=circle, 0 = hidden), third is number of legs (1, 2, 3, or 0=hidden)"
+hint_b,"hint for the second monster (middle) -- first is color (r=red, b=blue, p=purple), second is head shape (sq=square, cir=circle, 0 = hidden), third is number of legs (1, 2, 3, or 0=hidden)"
+hint_c,"hint for the third monster (right) -- first is color (r=red, b=blue, p=purple), second is head shape (sq=square, cir=circle, 0 = hidden), third is number of legs (1, 2, 3, or 0=hidden)"
+r_shape,"shape of the red monster's head (-1 = hidden, 1 = square, 2 = circle)"
+r_legs,"number of legs of the red monster (-1 = hidden, 1, 2, 3)"
+b_shape,"shape of the blue monster's head (-1 = hidden, 1 = square, 2 = circle)"
+b_legs,"number of legs of the blue monster (-1 = hidden, 1, 2, 3)"
+p_shape,"shape of the purple monster's head (-1 = hidden, 1 = square, 2 = circle)"
+p_legs,"number of legs of the purple monster (-1 = hidden, 1, 2, 3)"
+question,asked question
+question_standard,standardized text version of question (used for text-based similarity measure)
+question_program,question program translation
+question_abstracted_idealized,"question program translation, abstracting away free parameters"
+EIG,informativeness of asked question (expected information gain)
+entropy,overall uncertainty for the present trial (max possible information gain)
+notes,"was question skipped, ambiguous, invalid, not in grammar, etc."
+n_operations,how many functions are in the question total (proxy for complexity)
+n_unique_operations,how many unique functions are in the question (proxy for complexity)
+same_as_last,does this question repeat a question template used by the same participant on any previous trial?
+sim_to_last_standard,what is the maximum degree of text similarity between the standardized question asked on this trial and all previous-trial standardized questions (excluding instances of reuse)
+prev_trial_indices_reuse,"which previous trial indices were used for computing same_as_last (i.e., which previous trials had a valid question)"
+prev_trial_indices_remixing,"which previous trial indices were used for computing sim_to_last_standard (i.e., which previous trials had a valid question AND were not instances of reuse)"
