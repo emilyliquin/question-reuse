@@ -36,6 +36,8 @@ df_valid$AgeGroup <- ifelse(df_valid$AgeGroup == "Kids", "Children", "Adults")
 
 df_valid$question_abstracted_idealized = fct_infreq(as.factor(df_valid$question_abstracted_idealized))
 
+df_valid$AgeGroup <- factor(df_valid$AgeGroup, levels = c("Children", "Adults"))
+
 allhist <- ggplot(df_valid) + 
   geom_bar(aes(x = question_abstracted_idealized, 
                y = after_stat(count)/sum(after_stat(count)),
@@ -43,7 +45,7 @@ allhist <- ggplot(df_valid) +
   theme_classic(base_size = 9)+ 
   ylab("Proportion of\nTotal Questions") + 
   scale_x_discrete(labels = c()) + 
-  xlab("Unique\nQuestion Type") + 
+  xlab("Unique\nQuestion Template") + 
   scale_fill_manual(values = c("#403F4C", "#E84855"), 
                     name = "Age Group") +
   theme(legend.position = "bottom")
@@ -52,7 +54,6 @@ allhist
 
 # informativeness
 
-df_valid$AgeGroup <- factor(df_valid$AgeGroup, levels = c("Children", "Adults"))
 
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
@@ -141,7 +142,7 @@ reuse_1 <- ggplot(sim_reuse_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Trial-to-Trial Reuse") +
+  xlab("Across-Trial Reuse") +
   coord_cartesian(xlim = c(0, 0.6))
 reuse_1
 
@@ -186,7 +187,7 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Trial-to-Trial Remixing") +
+  xlab("Across-Trial Remixing") +
   coord_cartesian(xlim = c(0.63, 0.8))
 remixing_1
 

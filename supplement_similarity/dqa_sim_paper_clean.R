@@ -29,16 +29,16 @@ make_scatter <- function(modelvar, modellab){
 p1 <- make_scatter(sim_text, "Original text similarity")
 p2 <- make_scatter(sim_text_standard, "Standardized text similarity")
 p3 <- make_scatter(dist_tree, "Tree edit distance")
-p4 <- make_scatter(intersecting_arguments12, "Intersecting arguments (order 1)")
-p5 <- make_scatter(intersecting_arguments21, "Intersecting arguments (order 2)")
-p6 <- make_scatter(intersecting_functions12, "Intersecting functions (order 1)")
-p7 <- make_scatter(intersecting_functions21, "Intersecting functions (order 2)")
+p4 <- make_scatter(intersecting_arguments12, "Shared arguments (order 1)")
+p5 <- make_scatter(intersecting_arguments21, "Shared arguments (order 2)")
+p6 <- make_scatter(intersecting_functions12, "Shared functions (order 1)")
+p7 <- make_scatter(intersecting_functions21, "Shared functions (order 2)")
 
 
 p_all <- (plot_spacer() + p3 + plot_spacer()+ plot_layout(widths = c(0.7, 2, 1.3))) / 
   (p2+p1) / 
-  (p4+p5) / 
-  (p6+p7)
+  (p6+p7) / 
+  (p4+p5)
 p_all
 
 # ggsave(p_all, filename = "figures/sim_scatterplots.pdf", width = 5, height = 5, units = "in")

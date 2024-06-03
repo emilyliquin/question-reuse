@@ -248,7 +248,7 @@ reuse_1 <- ggplot(sim_reuse_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Trial-to-Trial Reuse") +
+  xlab("Across-Trial Reuse") +
   coord_cartesian(xlim = c(0, 0.6))
 reuse_1
 
@@ -297,7 +297,7 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Trial-to-Trial Remixing") +
+  xlab("Across-Trial Remixing") +
   coord_cartesian(xlim = c(0.65, 0.78))
 remixing_1
 
