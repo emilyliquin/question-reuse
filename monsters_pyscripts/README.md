@@ -4,9 +4,9 @@ This is codebase for parsing/executing questions and calculating Expected Inform
 
 This codebase is adapted from the [expected-information-gain](https://github.com/anselmrothe/EIG) package, by Anselm Rothe and Ziyun Wang. The original package is designed for the Battleship task, and we extend it to a new, child-friendly Monsters task.
 
-Please see `eig_example.py` for an example of how to represent questions as programs and calculate EIG for those programs.
+Please see `eig_example.ipynb` for an example of how to represent questions as programs and calculate EIG for those programs.
 
-Please see `similarity_example.py` for an example of how to calculate the similarity between two questions/programs, using tree edit distance and semantic similarity.
+Please see `similarity_example.ipynb` for an example of how to calculate the similarity between two questions/programs, using tree edit distance and semantic similarity.
 
 The easiest way to start using this codebase is to create a new conda environment using the `environment.yml` file in this repository. This will install all the necessary dependencies.
 
