@@ -45,3 +45,14 @@ def get_sim(question1, question2):
     dist = zss.simple_distance(
         make_tree(question1), make_tree(question2), CustomNode.get_children, CustomNode.get_label, strdist)
     return dist
+
+def get_sim_multi(question1, questions2):
+    if isinstance(questions2, str):
+        questions2 = [questions2]
+
+    output = {}
+    for question2 in questions2:
+        dist = get_sim(question1, question2)
+        output[question2] = dist
+
+    return output
