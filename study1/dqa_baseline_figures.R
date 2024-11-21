@@ -42,7 +42,7 @@ allhist <- ggplot(df_valid) +
   geom_bar(aes(x = question_abstracted_idealized, 
                y = after_stat(count)/sum(after_stat(count)),
                fill = AgeGroup)) + 
-  theme_classic(base_size = 9)+ 
+  theme_classic(base_size = 7)+ 
   ylab("Proportion of\nTotal Questions") + 
   scale_x_discrete(labels = c()) + 
   xlab("Unique\nQuestion Template") + 
@@ -80,7 +80,7 @@ p1 <- ggplot() +
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup, ymin = ci_lo, 
                                           ymax = ci_hi, color = AgeGroup),
                 width = 0.1) + 
-  theme_classic(base_size = 9) +
+  theme_classic(base_size = 7) +
   scale_x_discrete(labels = c("Children", "Adults")) + 
   xlab("Age Group") + 
   ylab("Expected Information Gain") + 
@@ -91,8 +91,7 @@ p1
 
 
 ggarrange(allhist, p1, labels = c("A", "B"), align = "hv", common.legend = TRUE, legend = "bottom") %>%
-  ggsave(filename = "figures/Study1_Fig_Combined.pdf", width = 6.5, height = 3, units = "in")
-
+  ggsave(filename = "figures/Study1_Fig_Combined.pdf", width = 5.5, height = 2.5, units = "in")
 
 ##### reuse and remixing ####
 
@@ -120,7 +119,7 @@ cis <- bs_summary %>% group_by(AgeGroup) %>%
 
 
 reuse_1 <- ggplot(sim_reuse_df) + 
-  stat_density_ridges(aes(x = reuse_rate, y = " Trial-matched simulations", fill = factor(stat(quantile))),
+  stat_density_ridges(aes(x = reuse_rate, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
@@ -129,7 +128,7 @@ reuse_1 <- ggplot(sim_reuse_df) +
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
-  ) + theme_classic(base_size = 9) +
+  ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec, 
                aes(x = same_as_last, y = AgeGroup, color = AgeGroup), 
                fun.data = "mean_cl_boot", 
@@ -141,15 +140,63 @@ reuse_1 <- ggplot(sim_reuse_df) +
   scale_color_manual(values = c("#403F4C", "#E84855"), 
                      name = "Age Group") + 
   theme(legend.position = "none") + 
-  ylab("") + 
-  xlab("Across-Trial Reuse") +
-  coord_cartesian(xlim = c(0, 0.6))
+  ylab("Group") + 
+  xlab("Proportion of Questions\nMatching a Previous Question") +
+  coord_cartesian(xlim = c(0, 0.6)) + 
+  ggtitle("Across-Trial Reuse")
 reuse_1
 
 
 
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == "0")
 
+
+
+###### tree edit distance
+# get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
+df_nest <- df_seq_consec_nonmatch %>% nest(data = -id)
+set.seed(65456)
+bs <- bootstraps(df_nest, times = 1000)
+bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
+                    group_by(AgeGroup_Split) %>% 
+                    summarize(mRemixing = mean(dist_to_last, na.rm = TRUE))) %>% 
+  bind_rows(.id = 'boots')
+
+cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
+  summarize(ci_lo = quantile(mRemixing, 0.025),
+            ci_hi = quantile(mRemixing, 0.975))
+
+
+remixing_1 <- ggplot(sim_remixing_df) + 
+  stat_density_ridges(aes(x = treedist_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
+                      geom = "density_ridges_gradient",
+                      calc_ecdf = TRUE,
+                      quantiles = c(0.025, 0.975),
+                      scale = 0.5,
+                      rel_min_height = .01
+  ) +
+  scale_fill_manual(
+    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+  ) + theme_classic(base_size = 7) +
+  stat_summary(data = df_seq_consec_nonmatch, 
+               aes(x = dist_to_last, y = AgeGroup_Split, color = AgeGroup_Split), 
+               fun.data = "mean_cl_boot", 
+               shape = 5, size = 2,
+               geom= "point") +
+  geom_errorbar(data = cis, mapping = aes(y = AgeGroup_Split, xmin = ci_lo, 
+                                          xmax = ci_hi, color = AgeGroup_Split),
+                width = 0.1) +
+  scale_color_manual(values = c("#9190A2", "#67667A", "#403F4C", "#E84855"), 
+                     name = "Age Group") + 
+  theme(legend.position = "none") + 
+  ylab("Group") + 
+  xlab("Tree Edit Distance to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0, 11)) +
+  ggtitle("Across-Trial Recombination\n(Tree Edit Distance)")
+remixing_1
+
+
+####### text-based semantic similarity
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_nest <- df_seq_consec_nonmatch %>% nest(data = -id)
 set.seed(21314)
@@ -164,8 +211,8 @@ cis <- bs_summary %>% group_by(AgeGroup) %>%
             ci_hi = quantile(mRemixing, 0.975))
 
 
-remixing_1 <- ggplot(sim_remixing_df) + 
-  stat_density_ridges(aes(x = remixing_mean, y = " Trial-matched simulations", fill = factor(stat(quantile))),
+remixing_2 <- ggplot(sim_remixing_df) + 
+  stat_density_ridges(aes(x = textsim_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
@@ -174,7 +221,7 @@ remixing_1 <- ggplot(sim_remixing_df) +
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
-  ) + theme_classic(base_size = 9) +
+  ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
                aes(x = sim_to_last_standard, y = AgeGroup, color = AgeGroup), 
                fun.data = "mean_cl_boot", 
@@ -187,12 +234,12 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Across-Trial Remixing") +
-  coord_cartesian(xlim = c(0.63, 0.8))
-remixing_1
+  xlab("Text-Based Semantic Similarity to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0.63, 0.8)) + 
+  ggtitle("Across-Trial Recombination\n(Text-Based Similarity)")
+remixing_2
 
 
-
-
-ggarrange(reuse_1, remixing_1, labels = c("A", "B")) %>%
-  ggsave(filename = "figures/Study1_ReuseRemixing.pdf", width = 6.5, height = 2, units = "in")
+library(patchwork)
+((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8))) %>%
+  ggsave(filename = "figures/Study1_ReuseRemixing.pdf", width = 5.5, height = 4, units = "in")
