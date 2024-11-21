@@ -13,7 +13,7 @@ use_condaenv(condaenv = "dqashare", required = T)
 #get data
 fulldf <- read_csv("data/dqa_similarity_clean.csv")
 
-##### get new similarity functions -- update tree edit dist, do text standardized ######
+##### get similarity functions -- tree edit distance, text similarity, and intersecting functions/arguments  ######
 
 source_python("../monsters_pyscripts/distance.py")
 
