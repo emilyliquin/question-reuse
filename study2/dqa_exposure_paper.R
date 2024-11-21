@@ -5,6 +5,8 @@ library(lme4)
 library(stargazer)
 library(car)
 library(broom.mixed)
+library(emmeans)
+library(lmerTest)
 
 setwd(this.path::here())
 
@@ -85,16 +87,16 @@ by_part_trials <- df2 %>% group_by(id, AgeGroup) %>%
 table(by_part_trials$AgeGroup, by_part_trials$n_valid_trials)
 
 excl.mod.kid <- glmer(trouble_response ~ age_mo + (1|id) + (1|trial_index), 
-              data = df2 %>% filter(AgeGroup == "Kids"),
-              family = "binomial")
-drop1(excl.mod.kid, test = "Chisq")
+                      data = df2 %>% filter(AgeGroup == "Kids"),
+                      family = "binomial")
+anova(excl.mod.kid, update(excl.mod.kid, . ~ . - age_mo))
 
 excl.mod.all <- glmer(trouble_response ~ AgeGroup_Split + (1|id) + (1|trial_index), 
-              data = df2,
-              family = "binomial")
+                      data = df2,
+                      family = "binomial")
 summary(excl.mod.all)
 Confint(excl.mod.all, exponentiate = TRUE)
-drop1(excl.mod.all, test = "Chisq")
+anova(excl.mod.all, update(excl.mod.all, . ~ . - AgeGroup_Split))
 
 mod_results <- tidy(excl.mod.all, conf.int = T, exponentiate = TRUE)
 
@@ -121,320 +123,699 @@ summary_final_sample
 
 
 
-## ---- Do children and adults reuse questions? --------------------------------------------------------------------------------
+##### for supplement: answering the target question correctly #####
 
-#### just within kids
-reuse.kid.int <- glmer(
-  target_match ~ exposure_cond * age_mo_center +
-    (1 | id) + (1|trial_type) + (1|question_cond),
-  data = df_valid2 %>% filter(trial_type != "zero" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa"))
-summary(reuse.kid.int)
-drop1(reuse.kid.int, test = "Chisq")  # no interaction, proceed to main effects
+df_valid2$answer_correct <- ifelse(df_valid2$exp_answer_response == df_valid2$exp_answer_correct, 1, 0)
 
-reuse.kid <- glmer(
-  target_match ~ exposure_cond + age_mo_center +
-    (1 | id) + (1|trial_type) + (1|question_cond),
-  data = df_valid2 %>% filter(trial_type != "zero" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa"))
-summary(reuse.kid)
-drop1(reuse.kid, test = "Chisq") # main effect of age (in months) -- use bins in model
+answerdf <- df_valid2 %>% group_by(id, exposure_cond, question_cond, AgeGroup, AgeGroup_Split, age_mo_center) %>%
+  summarize(answer_correct = answer_correct[1])
 
-# BUT the model with binned age group has problems because of zero cell counts
-the_data <- df_valid2 %>% filter(trial_type != "zero")
-table(the_data$AgeGroup_Split, the_data$target_match, the_data$exposure_cond)
-# so instead we'll just have to compare children vs. adults
+ggplot(answerdf, aes(x = AgeGroup_Split, y = answer_correct, color = question_cond)) + 
+  stat_summary(fun.data = "mean_cl_boot", position = position_dodge(0.9)) + 
+  theme_classic() + 
+  coord_cartesian(ylim = c(0, 1))
 
-##### children vs. adults
-reuse.all.int <- glmer(
-  target_match ~ exposure_cond * AgeGroup +
-    (1 | id) + (1|trial_type) + (1|question_cond),
-  data = df_valid2 %>% filter(trial_type != "zero"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa"))
+practiceans.kid.int <- glm(answer_correct ~ age_mo_center*question_cond, 
+          data = answerdf, family = "binomial")
+summary(practiceans.kid.int)
+drop1(practiceans.kid.int, test = "Chisq")# no interaction
+
+practiceans.kid <- glm(answer_correct ~ age_mo_center + question_cond, 
+          data = answerdf, family = "binomial")
+summary(practiceans.kid) # effect of age in months
+drop1(practiceans.kid, test = "Chisq")
+exp(Confint(practiceans.kid))
+
+# proportion of oldest children who answer correctly
+answerdf910 <- answerdf %>% filter(AgeGroup_Split == "9- to 10-year-olds")
+table(answerdf910$answer_correct) #100%
+
+# proportion of middle children who answer correctly
+answerdf78 <- answerdf %>% filter(AgeGroup_Split == "7- to 8-year-olds")
+table(answerdf78$answer_correct) #94%
+
+# proportion of youngest children who answer correctly
+answerdf56 <- answerdf %>% filter(AgeGroup_Split == "5- to 6-year-olds")
+table(answerdf56$answer_correct) #82%
+
+#is this above chance? 25% - four options
+table(answerdf56$answer_correct)
+chisq.test(table(answerdf56$answer_correct), p = c(0.75, 0.25))
+
+
+# children vs. adults
+practiceans.all.int <- glm(answer_correct ~ AgeGroup*question_cond, 
+          data = answerdf, family = "binomial")
+summary(practiceans.all.int) 
+drop1(practiceans.all.int, test = "Chisq")# no interaction
+
+practiceans.all <- glm(answer_correct ~ AgeGroup + question_cond, 
+          data = answerdf, family = "binomial")
+summary(practiceans.all)
+drop1(practiceans.all, test = "Chisq")# no effects
+exp(Confint(practiceans.all))
+
+# proportion of adults who answer correctly
+answerdfadult <- answerdf %>% filter(AgeGroup_Split == "Adults")
+table(answerdfadult$answer_correct) #95%
+
+
+####### Reuse -- is there an effect of exposure? ########
+
+# contrast coding for all dichotomous variables
+df_valid2$exposure_cond_code <- ifelse(df_valid2$exposure_cond == "baseline", -0.5, 0.5)
+df_valid2$quality_cond_code <- ifelse(df_valid2$quality_cond == "bad", -0.5, 0.5)
+df_valid2$question_cond_code <- ifelse(df_valid2$question_cond == "heads", -0.5, 0.5)
+df_valid2$age_group_code <- ifelse(df_valid2$AgeGroup == "Kids", -0.5, 0.5)
+
+
+### just focus on three trial types for this analysis (not zero) ###
+df_valid2_sub <- df_valid2 %>% filter(trial_type %in% c("best", "nonbest", "overcomplex"))
+
+# contrast coding for trial type
+c2<-contr.treatment(3)
+my.coding2<-matrix(rep(1/3, 6), ncol=2)
+my.simple2<-c2-my.coding2
+my.simple2
+
+df_valid2_sub$trial_type_code <- as.factor(as.character(df_valid2_sub$trial_type))
+contrasts(df_valid2_sub$trial_type_code) = my.simple2
+# under this coding scheme:
+# - intercept is grand mean
+# - trial_type_code2 is difference between best and nonbest
+# - trial_type_code3 is difference between best and overcomplex
+
+
+
+#### just in kids
+reuse.kids.int <- glmer(
+  target_match ~ 
+    exposure_cond_code * age_mo_center +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_valid2_sub %>% filter(AgeGroup == "Kids" ),
+  family = "binomial", control = glmerControl(optimizer = "bobyqa",
+                                              optCtrl=list(maxfun=100000)))
+summary(reuse.kids.int)
+anova(reuse.kids.int, 
+      update(reuse.kids.int, . ~ . - exposure_cond_code:age_mo_center)) # no interaction
+
+reuse.kids <- glmer(
+  target_match ~ 
+    exposure_cond_code + 
+    quality_cond_code + age_mo_center +
+    trial_type_code + age_mo_center +
+    question_cond_code + age_mo_center +
+    (1 | id),
+  data = df_valid2_sub %>% filter(AgeGroup == "Kids" ),
+  family = "binomial", control = glmerControl(optimizer = "bobyqa",
+                                              optCtrl=list(maxfun=100000)))
+summary(reuse.kids) # no sig. effect of age at p < .01 level (p = .02)
+
+
+reuse.all.int <- glmer(target_match ~ 
+                 exposure_cond_code * age_group_code +
+                 quality_cond_code * age_group_code + 
+                 trial_type_code * age_group_code + 
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2_sub,
+               family = "binomial", control = glmerControl(optimizer = "bobyqa"))
 summary(reuse.all.int)
-drop1(reuse.all.int, test = "Chisq") # no interaction, proceed to main effects
+anova(reuse.all.int, 
+      update(reuse.all.int, . ~ . - exposure_cond_code:age_group_code)) # no interaction
 
-reuse.all <- glmer(
-  target_match ~ exposure_cond + AgeGroup +
-    (1 | id) + (1|trial_type) + (1|question_cond),
-  data = df_valid2 %>% filter(trial_type != "zero"),
-  family = "binomial")
+
+reuse.all <- glmer(target_match ~ 
+                 exposure_cond_code +
+                 quality_cond_code * age_group_code + 
+                 trial_type_code * age_group_code + 
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2_sub,
+               family = "binomial", control = glmerControl(optimizer = "bobyqa"))
 summary(reuse.all)
-drop1(reuse.all, test = "Chisq") # effect of age group and exposure_cond
+anova(reuse.all, 
+      update(reuse.all, . ~ . - exposure_cond_code)) #effect of exposure
 exp(Confint(reuse.all))
 
-## ----reuse and prior informativeness--------------------------------------------------------------------------------
 
-##### just within kids
-reuse.prior.kid.int <- glmer(
-  target_match ~ quality_cond * age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_valid2 %>% filter(trial_type != "zero" & exposure_cond == "exposure" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa")
-)
-summary(reuse.prior.kid.int)
-drop1(reuse.prior.kid.int, test = "Chisq") # no interaction, proceed to main effects
+(emm <- emmeans(reuse.all, revpairwise ~ age_group_code, type = "response"))
+confint(emm)
 
-
-reuse.prior.kid <- glmer(
-  target_match ~ quality_cond + age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_valid2 %>% filter(trial_type != "zero" & exposure_cond == "exposure" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa")
-)
-summary(reuse.prior.kid)
-drop1(reuse.prior.kid, test = "Chisq") # main effect of age, use age group bins
-
-###### comparing children vs. adults
-reuse.prior.all.int <- glmer(
-  target_match ~ quality_cond * AgeGroup_Split +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_valid2 %>% filter(trial_type != "zero" & exposure_cond == "exposure"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa")
-)
-summary(reuse.prior.all.int)
-drop1(reuse.prior.all.int, test = "Chisq") #no interaction, proceed to main effects
-
-
-reuse.prior.all <- glmer(
-  target_match ~ quality_cond + AgeGroup_Split +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_valid2 %>% filter(trial_type != "zero" & exposure_cond == "exposure"),
-  family = "binomial"
-)
-summary(reuse.prior.all)
-drop1(reuse.prior.all, test = "Chisq") # main effect of age group, but not quality cond
-exp(Confint(reuse.prior.all))
 
 ##### make full regression table for supplement
-mod_results <- tidy(reuse.prior.all, conf.int = T, exponentiate = TRUE)
+mod_results <- tidy(reuse.all, conf.int = T, exponentiate = TRUE)
+mod_results <- mod_results %>% filter(effect == "fixed")
 
-stargazer(reuse.prior.all, type = "text",
+
+stargazer(reuse.all, type = "latex",
           dep.var.labels = "Match to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
           coef = list(mod_results$estimate), 
           ci.custom = list(as.matrix(mod_results[,c("conf.low", "conf.high")])),
           p = list(mod_results$p.value), 
-          covariate.labels = c("Previous Quality Condition [Previously-informative]", "Age Group [7- to 8-year-olds]", 
-                               "Age Group [9- to 10-year-olds]", "Age Group [Adults]", "Intercept"))
+          covariate.labels = c("Exposure Condition [Exposure]", 
+                               "Previous Quality Condition [Previously Informative]", 
+                               "Age Group [Adults]", 
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Question Condition [Legs]",
+                               "Previous Quality Condition [Previously Informative] : Age Group [Adults]",
+                               "Age Group [Adults] : Trial Type [Medium]",
+                               "Age Group [Adults] : Trial Type [Too-Complex]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
+
+
+######## Reuse -- is there an effect of previous and current informativeness, in exposure condition? ###########
+
+# re do trial type coding for all four levels
+c2<-contr.treatment(4)
+my.coding2<-matrix(rep(1/4, 12), ncol=3)
+my.simple2<-c2-my.coding2
+my.simple2
+
+df_valid2$trial_type_code <- as.factor(as.character(df_valid2$trial_type))
+contrasts(df_valid2$trial_type_code) = my.simple2
+# under this coding scheme:
+# - intercept is grand mean
+# - trial_type_code2 is difference between best and nonbest
+# - trial_type_code3 is difference between best and overcomplex
+# - trial_type_code4 is difference between best and zero
 
 
 
-
-## ----reuse and current informativeness--------------------------------------------------------------------------------
-
-#### just within kids
-reuse.current.kid.int <- glmer(
-  target_match ~ trial_type * age_mo_center +
-    (1 | id) + (1 | question_cond),
+#### just in kids
+context.kid.int <- glmer(
+  target_match ~ 
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
   data = df_valid2 %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa")
-)
-summary(reuse.current.kid.int)
-drop1(reuse.current.kid.int, test = "Chisq") ## no interaction, proceed to main effects
+  family = "binomial", control = glmerControl(optimizer = "bobyqa"))
+summary(context.kid.int)
+anova(context.kid.int, update(context.kid.int, .~. - quality_cond_code:age_mo_center))
+anova(context.kid.int, update(context.kid.int, .~. - trial_type_code:age_mo_center))
+ # no interactions
 
-reuse.current.kid <- glmer(
-  target_match ~ trial_type + age_mo_center +
-    (1 | id) + (1 | question_cond),
+context.kid <- glmer(
+  target_match ~ quality_cond_code +
+    trial_type_code +
+    question_cond_code * age_mo_center +
+    (1 | id),
   data = df_valid2 %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids"),
-  family = "binomial", control = glmerControl(optimizer = "bobyqa")
-)
-summary(reuse.current.kid)
-drop1(reuse.current.kid, test = "Chisq") ## effect of age, use binned age group for main analyses
+  family = "binomial", control = glmerControl(optimizer = "bobyqa"))
+summary(context.kid) # effect of age not significant at p < .01 level
 
-# but we again have problems with zero cell counts, so the model won't fit
-table(df_valid2$AgeGroup_Split, df_valid2$target_match, df_valid2$trial_type)
-# so we have to collapse across age bins and just compare children vs. adults
-
-###### kids vs. adults
-reuse.current.all.int <- glmer(
-  target_match ~ trial_type * AgeGroup +
-    (1 | id) + (1 | question_cond),
-  data = df_valid2 %>% filter(exposure_cond == "exposure"),
-  family = "binomial", control = glmerControl(optimizer="bobyqa"))
-drop1(reuse.current.all.int, test = "Chisq") # no interaction, proceed to main effects
+### kids vs adults
+context.all.int <- glmer(target_match ~ 
+                 quality_cond_code * age_group_code + 
+                 trial_type_code * age_group_code + 
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2 %>% filter(exposure_cond == "exposure"),
+               family = "binomial", control = glmerControl(optimizer = "bobyqa"))
+summary(context.all.int)
+anova(context.all.int, update(context.all.int, .~. - quality_cond_code:age_group_code))
+anova(context.all.int, update(context.all.int, .~. - trial_type_code:age_group_code))
 
 
-reuse.current.all <- glmer(
-  target_match ~ trial_type + AgeGroup +
-    (1 | id) + (1 | question_cond),
-  data = df_valid2 %>% filter(exposure_cond == "exposure"),
-  family = "binomial"
-)
-summary(reuse.current.all)
-drop1(reuse.current.all, test = "Chisq") # main effect of both age group and trial type
-exp(Confint(reuse.current.all))
+context.all <- glmer(target_match ~ 
+                 quality_cond_code +
+                 trial_type_code +
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2 %>% filter(exposure_cond == "exposure"),
+               family = "binomial", control = glmerControl(optimizer = "bobyqa"))
+summary(context.all)
+anova(context.all, update(context.all, .~. - quality_cond_code))
+anova(context.all, update(context.all, .~. - trial_type_code))
+exp(Confint(context.all))
+
+##### make full regression table for supplement
+mod_results <- tidy(context.all, conf.int = T, exponentiate = TRUE)
+mod_results <- mod_results %>% filter(effect == "fixed")
 
 
-## ---- Do children and adults remix questions? --------------------------------------------------------------------------------
-
-df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
-
-#interaction within kids
-remix.kid.int <- lmer(
-  target_sim_standard ~ exposure_cond * age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(AgeGroup == "Kids")
-)
-summary(remix.kid.int)
-drop1(remix.kid.int, test = "Chisq") # no interaction
-
-### main effects within kids
-remix.kid <- lmer(
-  target_sim_standard ~ exposure_cond + age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(AgeGroup == "Kids")
-)
-summary(remix.kid)
-drop1(remix.kid, test = "Chisq") # effect of age > .01 (preregistered cutoff)
-
-### interaction kids vs. adults
-remix.all.int <- lmer(
-  target_sim_standard ~ exposure_cond * AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch
-)
-summary(remix.all.int)
-drop1(remix.all.int, test = "Chisq") #no interaction 
-
-### main effects kids vs. adults
-remix.all <- lmer(
-  target_sim_standard ~ exposure_cond + AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch, control = lmerControl(optimizer = "bobyqa")
-)
-summary(remix.all)
-drop1(remix.all, test = "Chisq") # main effects of exposure_cond and Age Group
-Confint(remix.all)
-
-## ---- remixing and prior informativeness--------------------------------------------------------------------------------
-
-remix.prior.kid.int <- lmer(
-  target_sim_standard ~ quality_cond * age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids")
-)
-summary(remix.prior.kid.int)
-drop1(remix.prior.kid.int, test = "Chisq") # no interaction, proceed to main effects
-
-remix.prior.kid <- lmer(
-  target_sim_standard ~ quality_cond + age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids")
-)
-summary(remix.prior.kid)
-drop1(remix.prior.kid, test = "Chisq") # no effect of age or quality cond 
-
-
-#### kids vs. adults
-remix.prior.all.int <- lmer(
-  target_sim_standard ~ quality_cond * AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure")
-)
-summary(remix.prior.all.int)
-drop1(remix.prior.all.int, test = "Chisq") # no interaction
-
-
-#### kids vs. adults, main effects
-remix.prior.all <- lmer(
-  target_sim_standard ~ quality_cond + AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure")
-)
-summary(remix.prior.all)
-drop1(remix.prior.all, test = "Chisq") # effect of age but not quality cond
-Confint(remix.prior.all)
-
-
-## ---- EXPLORATORY: remixing and CURRENT informativeness--------------------------------------------------------------------------------
-
-df_nonmatch %>% filter(exposure_cond == "exposure") %>%
-  group_by(trial_type) %>%
-  summarize(m = mean(target_sim_standard),
-            sd = sd(target_sim_standard))
-
-remix.current.all <- lmer(
-  target_sim_standard ~ trial_type +
-    (1 | id) + (1 | question_cond),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure"),
-)
-summary(remix.current.all)
-drop1(remix.current.all, test = "Chisq") # main effect of trial type
-
-# table for supplement
-stargazer(remix.current.all, type = "text",
-          dep.var.labels = "Similarity to target question",
+stargazer(context.all, type = "latex",
+          dep.var.labels = "Match to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
-          covariate.labels = c("Trial type [medium]",
-                               "Trial type [too-complex]",
-                               "Trial type [zero]", 
-                               "Intercept"), p.auto = FALSE)
+          coef = list(mod_results$estimate), 
+          ci.custom = list(as.matrix(mod_results[,c("conf.low", "conf.high")])),
+          p = list(mod_results$p.value), 
+          covariate.labels = c("Previous Quality Condition [Previously Informative]", 
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Question Condition [Legs]",
+                               "Age Group [Adults]", 
+                               "Question Condition [Legs] : Age Group [Adults]",
+                               "Intercept"))
 
 
 
 
-remix.cond.all <- lmer(
-  target_sim_standard ~ trial_type*exposure_cond +
-    (1 | id) + (1 | question_cond),
-  data = df_nonmatch,
-)
-summary(remix.cond.all)
-drop1(remix.cond.all, test = "Chisq") # no interaction
+######## Recombination -- is there an effect of exposure? ############
+
+# just non-target-matching questions
+df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
+
+### tree edit distance first
+
+#### just in kids
+recomb.kid.int1 <- lmer(
+  target_dist ~ 
+    exposure_cond_code * age_mo_center +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
+summary(recomb.kid.int1)
+anova(recomb.kid.int1, update(recomb.kid.int1, . ~ . - exposure_cond_code:age_mo_center))
+
+recomb.kid1 <- lmer(
+  target_dist ~ 
+    exposure_cond_code  +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
+summary(recomb.kid1) # no significant effect of age
 
 
-## ----EXPLORATORY: Do reuse and remixing help people ask better questions?---------------------------------------------------------------------------------------------------
+recomb.all.int1 <- lmer(target_dist ~ 
+                exposure_cond_code * age_group_code +
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch)
+summary(recomb.all.int1)
+anova(recomb.all.int1, update(recomb.all.int1, . ~ . - exposure_cond_code:age_group_code))
 
 
-#### does this vary by age? ####
-eig.kid.int <- lmer(EIG ~ exposure_cond*age_mo_center + 
-               (1|id) + (1|trial_type) + (1|question_cond),
-             data = df_valid2 %>% filter(AgeGroup == "Kids"))
+recomb.all1 <- lmer(target_dist ~ 
+                exposure_cond_code +
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch)
+summary(recomb.all1)
+anova(recomb.all1, update(recomb.all1, . ~ . - exposure_cond_code))
+Confint(recomb.all1)
+
+(emm <- emmeans(recomb.all1, revpairwise ~ age_group_code))
+confint(emm)
+
+##### make full regression table for supplement
+recomb.all1 <- lme4::lmer(target_dist ~ 
+             exposure_cond_code +
+             quality_cond_code * age_group_code + 
+             trial_type_code * age_group_code + 
+             question_cond_code * age_group_code +
+             (1 | id),
+           data = df_nonmatch)
+
+
+stargazer(recomb.all1, type = "text",
+          dep.var.labels = "Tree edit distance from target question",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
+          covariate.labels = c("Exposure Condition [Exposure]",
+                               "Previous Quality Condition [Previously Informative]", 
+                               "Age Group [Adults]", 
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Question Condition [Legs]",
+                               "Previous Quality Condition [Previously Informative] : Age Group [Adults]", 
+                               "Age Group [Adults] : Trial Type [Medium]",
+                               "Age Group [Adults] : Trial Type [Too-Complex]",
+                               "Age Group [Adults] : Trial Type [Worst]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
+
+
+
+
+##### now text sim 
+
+
+#### just in kids
+recomb.kid.int2 <- lmer(
+  target_sim_standard ~ 
+    exposure_cond_code * age_mo_center +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
+summary(recomb.kid.int2)
+anova(recomb.kid.int2, update(recomb.kid.int2, . ~ . - exposure_cond_code: age_mo_center))
+
+
+#### no interactions
+recomb.kid2 <- lmer(
+  target_sim_standard ~ 
+    exposure_cond_code +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
+summary(recomb.kid2) # age not sig. at p<.01 level
+
+
+
+
+recomb.all.int2 <- lmer(target_sim_standard ~ 
+                exposure_cond_code * age_group_code +
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch)
+summary(recomb.all.int2)
+anova(recomb.all.int2, update(recomb.all.int2, . ~ . - exposure_cond_code:age_group_code))
+
+
+recomb.all2 <- lmer(target_sim_standard ~ 
+                exposure_cond_code +
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch)
+summary(recomb.all2)
+anova(recomb.all2, update(recomb.all2, . ~ . - exposure_cond_code))
+Confint(recomb.all2)
+
+
+(emm <- emmeans(recomb.all2, revpairwise ~ age_group_code))
+confint(emm)
+
+
+
+##### make full regression table for supplement
+recomb.all2 <- lme4::lmer(target_sim_standard ~ 
+                   exposure_cond_code +
+                   quality_cond_code * age_group_code + 
+                   trial_type_code * age_group_code + 
+                   question_cond_code * age_group_code +
+                   (1 | id),
+                 data = df_nonmatch)
+
+
+stargazer(recomb.all2, type = "text",
+          dep.var.labels = "Text-based semantic similarity",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
+          covariate.labels = c("Exposure Condition [Exposure]",
+                               "Previous Quality Condition [Previously Informative]", 
+                               "Age Group [Adults]", 
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Question Condition [Legs]",
+                               "Previous Quality Condition [Previously Informative] : Age Group [Adults]", 
+                               "Age Group [Adults] : Trial Type [Medium]",
+                               "Age Group [Adults] : Trial Type [Too-Complex]",
+                               "Age Group [Adults] : Trial Type [Worst]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
+
+
+
+
+######### Recombination -  is there an effect of previous informativeness, in exposure condition? ####################
+
+### tree edit distance first
+
+#### just in kids
+recomb.context.kid.int1 <- lmer(
+  target_dist ~ 
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" & exposure_cond == "exposure"))
+summary(recomb.context.kid.int1)
+anova(recomb.context.kid.int1, 
+      update(recomb.context.kid.int1, . ~ . - quality_cond_code: age_mo_center))
+#no significant interaction
+
+recomb.context.kid1 <- lmer(
+  target_dist ~ 
+    quality_cond_code +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" & exposure_cond == "exposure"))
+summary(recomb.context.kid1) # no sig. effect of age
+
+### kids vs. adults
+recomb.context.all.int1 <- lmer(target_dist ~ 
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+summary(recomb.context.all.int1)
+anova(recomb.context.all.int1, 
+      update(recomb.context.all.int1, . ~ . - quality_cond_code: age_group_code))
+
+
+recomb.context.all1 <- lmer(target_dist ~ 
+                quality_cond_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+summary(recomb.context.all1)
+anova(recomb.context.all1, 
+      update(recomb.context.all1, . ~ . - quality_cond_code))
+Confint(recomb.context.all1)
+ 
+
+
+##### make full regression table for supplement
+# this is also used to show the effect of trial type (exploratory)
+recomb.context.all1 <- lme4::lmer(target_dist ~ 
+                   quality_cond_code + 
+                   trial_type_code * age_group_code + 
+                   question_cond_code * age_group_code +
+                   (1 | id),
+                 data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+
+
+stargazer(recomb.context.all1, type = "latex",
+          dep.var.labels = "Tree edit distance",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
+          covariate.labels = c("Previous Quality Condition [Previously Informative]",
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Age Group [Adults]", 
+                               "Question Condition [Legs]",
+                               "Trial Type [Medium]: Age Group [Adults]",
+                               "Trial Type [Too-Complex] : Age Group [Adults]",
+                               "Trial Type [Worst] : Age Group [Adults]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
+
+
+##### now text sim 
+
+#### just in kids
+recomb.context.kid.int2 <- lmer(
+  target_sim_standard ~ 
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" &exposure_cond == "exposure" ))
+summary(recomb.context.kid.int2)
+anova(recomb.context.kid.int2, 
+      update(recomb.context.kid.int2, . ~ . - quality_cond_code: age_mo_center))
+#no significant interaction
+
+recomb.context.kid2 <- lmer(
+  target_sim_standard ~ 
+    quality_cond_code +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_nonmatch %>% filter(AgeGroup == "Kids" & exposure_cond == "exposure" ))
+summary(recomb.context.kid2) # no effect of age
+
+
+recomb.context.all.int2 <- lmer(target_sim_standard ~ 
+                quality_cond_code * age_group_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+summary(recomb.context.all.int2)
+anova(recomb.context.all.int2, 
+      update(recomb.context.all.int2, . ~ . - quality_cond_code: age_group_code)) #not sig
+
+
+recomb.context.all2 <- lmer(target_sim_standard ~ 
+                quality_cond_code + 
+                trial_type_code * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+summary(recomb.context.all2)
+anova(recomb.context.all2, update(recomb.context.all2, . ~ . - quality_cond_code))
+Confint(recomb.context.all2)
+
+
+##### make full regression table for supplement
+# this is also used to show the effect of trial type (exploratory)
+recomb.context.all2 <- lme4::lmer(target_sim_standard ~ 
+                   quality_cond_code + 
+                   trial_type_code * age_group_code + 
+                   question_cond_code * age_group_code +
+                   (1 | id),
+                 data = df_nonmatch %>% filter(exposure_cond == "exposure"))
+
+
+stargazer(recomb.context.all2, type = "latex",
+          dep.var.labels = "Text-based semantic similarity",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
+          covariate.labels = c("Previous Quality Condition [Previously Informative]",
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Age Group [Adults]", 
+                               "Question Condition [Legs]",
+                               "Trial Type [Medium]: Age Group [Adults]",
+                               "Trial Type [Too-Complex] : Age Group [Adults]",
+                               "Trial Type [Worst] : Age Group [Adults]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
+
+
+
+
+## ----EXPLORATORY: Do reuse and recombination help people ask better questions?---------------------------------------------------------------------------------------------------
+
+
+#### just in kids
+eig.kid.int <- lmer(
+  EIG ~ 
+    exposure_cond_code * age_mo_center +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_valid2 %>% filter(AgeGroup == "Kids" ))
 summary(eig.kid.int)
-drop1(eig.kid.int, test = "Chisq") # no interaction within kids
+anova(eig.kid.int, update(eig.kid.int, . ~ . - exposure_cond_code:age_mo_center))
+#no interactions
 
-eig.kid <- lmer(EIG ~ exposure_cond + age_mo_center + 
-               (1|id) + (1|trial_type) + (1|question_cond),
-             data = df_valid2 %>% filter(AgeGroup == "Kids"))
-summary(eig.kid)
-drop1(eig.kid, test = "Chisq") # no effect of age within kids
+eig.kid <- lmer(
+  EIG ~ 
+    exposure_cond_code  +
+    quality_cond_code * age_mo_center +
+    trial_type_code * age_mo_center +
+    question_cond_code * age_mo_center +
+    (1 | id),
+  data = df_valid2 %>% filter(AgeGroup == "Kids" ))
+summary(eig.kid) # no effect of age
 
-eig.all.int <- lmer(EIG ~ exposure_cond*AgeGroup + 
-               (1|id) + (1|trial_type) + (1|question_cond),
-             data = df_valid2)
+
+eig.all.int <- lmer(EIG ~ 
+                 exposure_cond_code * age_group_code +
+                 quality_cond_code * age_group_code + 
+                 trial_type_code * age_group_code + 
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2)
 summary(eig.all.int)
-drop1(eig.all.int, test = "Chisq") # no interaction 
+anova(eig.all.int, update(eig.all.int, . ~ . - exposure_cond_code:age_group_code))
 
-
-eig.all <- lmer(EIG ~ exposure_cond + AgeGroup + 
-               (1|id) + (1|trial_type) + (1|question_cond),
-             data = df_valid2)
+eig.all <- lmer(EIG ~ 
+                 exposure_cond_code +
+                 quality_cond_code * age_group_code + 
+                 trial_type_code * age_group_code + 
+                 question_cond_code * age_group_code +
+                 (1 | id),
+               data = df_valid2)
 summary(eig.all)
-drop1(eig.all, test = "Chisq") # main effects of both exposure_cond and age group
+anova(eig.all, update(eig.all, . ~ . - exposure_cond_code))
 Confint(eig.all)
 
-##### is this a result of reuse, remixing, or both? #####
 
-eig.reuse <- lmer(EIG ~ target_match + 
-               (1|id) + (1|trial_type) +(1|question_cond),
-             data = df_valid2)
-summary(eig.reuse)
-drop1(eig.reuse, test = "Chisq") ## interaction with trial type
-Confint(eig.reuse)
+(emm <- emmeans(eig.all, revpairwise ~ age_group_code, type = "response"))
+confint(emm)
 
-
-eig.reusecond <- lmer(EIG ~ target_match + exposure_cond + 
-               (1|id) + (1|trial_type) +(1|question_cond),
-             data = df_valid2)
-summary(eig.reusecond)
-drop1(eig.reusecond, test = "Chisq") ## interaction with trial type
-Confint(eig.reusecond)
+##### make full regression table for supplement
+eig.all <- lme4::lmer(EIG ~ 
+                   exposure_cond_code +
+                   quality_cond_code * age_group_code + 
+                   trial_type_code * age_group_code + 
+                   question_cond_code * age_group_code +
+                   (1 | id),
+                 data = df_valid2)
 
 
+stargazer(eig.all, type = "latex",
+          dep.var.labels = "EIG",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
+          covariate.labels = c("Exposure Condition [Exposure]", 
+                               "Previous Quality Condition [Previously Informative]", 
+                               "Age Group [Adults]", 
+                               "Trial Type [Medium]",
+                               "Trial Type [Too-Complex]",
+                               "Trial Type [Worst]",
+                               "Question Condition [Legs]",
+                               "Previous Quality Condition [Previously Informative] : Age Group [Adults]",
+                               "Age Group [Adults] : Trial Type [Medium]",
+                               "Age Group [Adults] : Trial Type [Too-Complex]",
+                               "Age Group [Adults] : Trial Type [Worst]",
+                               "Age Group [Adults] : Question Condition [Legs]",
+                               "Intercept"))
 
-## ----EXPLORATORY: Trial-to-trial reuse/remixing---------------------------------------------------------------------------------------------------
+
+
+
+
+
+##### is this a result of reuse, recombination, or both? #####
+
+# is there an effect of whether a question matched the target on EIG?
+# controlling for that, does the effect of exposure_cond remain (indicating recombination is doing something), or go away (indicating it's just reuse)?
+
+eig.followup <- lmer(EIG ~ target_match + 
+                exposure_cond_code +
+                quality_cond_code * age_group_code + 
+                trial_type * age_group_code + 
+                question_cond_code * age_group_code +
+                (1 | id),
+              data = df_valid2)
+summary(eig.followup)
+anova(eig.followup, update(eig.followup, . ~ . - target_match))
+anova(eig.followup, update(eig.followup, . ~ . - exposure_cond_code))
+Confint(eig.followup)
+
+
+
+
+## ----EXPLORATORY: Trial-to-trial reuse/recombination---------------------------------------------------------------------------------------------------
 
 
 df_seq_consec <- df_valid2 %>% filter(!is.na(same_as_last))
@@ -448,22 +829,23 @@ table(df_seq_consec$AgeGroup)
 df_seq_consec$same_as_last <- as.factor(df_seq_consec$same_as_last)
 
 reusetrials.kid <- glmer(same_as_last ~ age_mo_center + (1|id), 
-              data = df_seq_consec %>% filter(AgeGroup == "Kids"), family = "binomial")
+                         data = df_seq_consec %>% filter(AgeGroup == "Kids"), family = "binomial")
 summary(reusetrials.kid)
-drop1(reusetrials.kid, test = "Chisq") # effect of age, so bin age group
+anova(reusetrials.kid, update(reusetrials.kid, . ~ . - age_mo_center))
+ # effect of age, so bin age group
 
 
 reusetrials.all <- glmer(same_as_last ~ AgeGroup_Split + (1|id), 
-              data = df_seq_consec, family = "binomial")
+                         data = df_seq_consec, family = "binomial")
 summary(reusetrials.all)
-drop1(reusetrials.all, test = "Chisq") 
-Confint(reusetrials.all)
+anova(reusetrials.all, update(reusetrials.all, . ~ . - AgeGroup_Split))
+exp(Confint(reusetrials.all))
 
 ##### make full regression table for supplement
 mod_results <- tidy(reusetrials.all, conf.int = T, exponentiate = TRUE)
 mod_results <- mod_results %>% filter(effect == "fixed")
 
-stargazer(reusetrials.all, type = "text",
+stargazer(reusetrials.all, type = "latex",
           dep.var.labels = "Match to any previously-asked question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
@@ -476,25 +858,53 @@ stargazer(reusetrials.all, type = "text",
 
 
 
-###### Does trial-to-trial remixing differ by age? #####
+###### Does trial-to-trial recombination differ by age? #####
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == 0)
+
+
+### dist_to_last (tree edit dist)
+remixingtrials.kid <- lmer(dist_to_last ~ age_mo_center + (1|id), 
+                           data = df_seq_consec_nonmatch %>% filter(AgeGroup == "Kids"),
+                           control = lmerControl(optimizer = "bobyqa"))
+summary(remixingtrials.kid)
+anova(remixingtrials.kid, update(remixingtrials.kid, .~.-age_mo_center)) # effect of age
+
+remixingtrials.all <- lmer(dist_to_last ~ AgeGroup_Split + (1|id), 
+                           data = df_seq_consec_nonmatch, control = lmerControl(optimizer = "bobyqa"))
+summary(remixingtrials.all)
+anova(remixingtrials.all, update(remixingtrials.all, .~.-AgeGroup_Split)) # effect of age
+Confint(remixingtrials.all)
+
+
+##### make full regression table for supplement
+m1 <- lme4::lmer(dist_to_last ~ AgeGroup_Split + (1|id), 
+                           data = df_seq_consec_nonmatch, control = lmerControl(optimizer = "bobyqa"))
+
+stargazer(m1, type = "latex",
+          dep.var.labels = "Tree edit distance to least-distance previous question",
+          ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"), 
+          covariate.labels = c("Age Group [7- to 8-year-olds]", 
+                               "Age Group [9- to 10-year-olds]", "Age Group [Adults]", "Intercept"))
+
 
 
 ### sim_to_last (text similarity)
 remixingtrials.kid <- lmer(sim_to_last_standard ~ age_mo_center + (1|id), 
-             data = df_seq_consec_nonmatch %>% filter(AgeGroup == "Kids"),
-             control = lmerControl(optimizer = "bobyqa"))
+                           data = df_seq_consec_nonmatch %>% filter(AgeGroup == "Kids"),
+                           control = lmerControl(optimizer = "bobyqa"))
 summary(remixingtrials.kid)
-drop1(remixingtrials.kid, test = "Chisq") ## no effect of age (in kids)
+anova(remixingtrials.kid, update(remixingtrials.kid, .~.-age_mo_center)) # no effect of age
 
 remixingtrials.all <- lmer(sim_to_last_standard ~ AgeGroup + (1|id), 
-             data = df_seq_consec_nonmatch)
+                           data = df_seq_consec_nonmatch)
 summary(remixingtrials.all)
-drop1(remixingtrials.all, test = "Chisq") ## no effects
+anova(remixingtrials.all, update(remixingtrials.all, .~.-AgeGroup)) # no effect of age
 Confint(remixingtrials.all)
 
 
-##### trial-to-trial reuse/remixing, comparison to null ########
+
+##### trial-to-trial reuse/recombination, comparison to null ########
 
 sim_reuse_df <- read_csv("simulations/dqa_exposure_reuse.csv")
 sim_remixing_df <- read_csv("simulations/dqa_exposure_remixing.csv")
@@ -507,14 +917,15 @@ sim_remixing_df <- read_csv("simulations/dqa_exposure_remixing.csv")
 # kids and adults who ever saw that question
 
 
-reuse_rates <- tapply(df_seq_consec$same_as_last, df_seq_consec$AgeGroup, function(x) {sum(x == 1)/length(x)})
+reuse_rates <- tapply(df_seq_consec$same_as_last, df_seq_consec$AgeGroup_Split, function(x) {sum(x == 1)/length(x)})
 
 #### null for reuse #####
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
-sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["Kids"])/1000
-sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["Adults"])/1000
-
+sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["5- to 6-year-olds"])/1000
+sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["7- to 8-year-olds"])/1000
+sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["9- to 10-year-olds"])/1000
+sum(sim_reuse_df %>% select(reuse_rate) >= reuse_rates["9- to 10-year-olds"])/1000
 
 # this is the full range
 quantile(sim_reuse_df %>% select(reuse_rate) %>% unlist(), 
@@ -523,109 +934,136 @@ quantile(sim_reuse_df %>% select(reuse_rate) %>% unlist(),
 reuse_rates
 
 
-#### null for remixing #####
+#### null for recombination #####
 
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == 0)
+
+
+## tree edit distance 
+mean_dist <- tapply(df_seq_consec_nonmatch$dist_to_last, df_seq_consec_nonmatch$AgeGroup_Split, mean)
+mean_dist
 
 ## text similarity, standardized
 mean_sim_standard <- tapply(df_seq_consec_nonmatch$sim_to_last_standard, df_seq_consec_nonmatch$AgeGroup, mean)
 mean_sim_standard
 
+# p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
+sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["5- to 6-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["7- to 8-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["9- to 10-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["Adults"])/1000
+
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
-sum(sim_remixing_df %>% select(remixing_mean) >= mean_sim_standard["Kids"])/1000
-sum(sim_remixing_df %>% select(remixing_mean) >= mean_sim_standard["Adults"])/1000
+sum(sim_remixing_df %>% select(textsim_mean) >= mean_sim_standard["Kids"])/1000
+sum(sim_remixing_df %>% select(textsim_mean) >= mean_sim_standard["Adults"])/1000
 
 
 # this is the full range of the null
-quantile(sim_remixing_df %>% select(remixing_mean) %>% unlist(), 
+quantile(sim_remixing_df %>% select(treedist_mean) %>% unlist(), 
+         c(0, 1))
+# true values are higher
+mean_dist
+
+# this is the full range of the null
+quantile(sim_remixing_df %>% select(textsim_mean) %>% unlist(), 
          c(0, 1))
 # true values are higher
 mean_sim_standard
 
 
-######################### SUPPLEMENT: PREREGISTERED REMIXING ANALYSES ###########################
-
-
-## ---- Do children and adults remix questions? --------------------------------------------------------------------------------
-
-
-#interaction within kids
-remix.dist.kid.int <- lmer(
-  target_dist ~ exposure_cond * age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(AgeGroup == "Kids")
-)
-summary(remix.dist.kid.int)
-drop1(remix.dist.kid.int, test = "Chisq") # no interaction
-
-### main effects within kids
-remix.dist.kid <- lmer(
-  target_dist ~ exposure_cond + age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(AgeGroup == "Kids")
-)
-summary(remix.dist.kid)
-drop1(remix.dist.kid, test = "Chisq") # effect of age > .01
-
-### interaction kids vs. adults
-remix.dist.all.int <- lmer(
-  target_dist ~ exposure_cond * AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch
-)
-summary(remix.dist.all.int)
-drop1(remix.dist.all.int, test = "Chisq") #no interaction 
-
-### main effects kids vs. adults
-remix.dist.all <- lmer(
-  target_dist ~ exposure_cond + AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch, control = lmerControl(optimizer = "bobyqa")
-)
-summary(remix.dist.all)
-drop1(remix.dist.all, test = "Chisq") #main effect of age group, exposure cond > .01
-Confint(remix.dist.all)
-
-## ---- remixing and prior informativeness--------------------------------------------------------------------------------
-
-##### interactions
-
-remix.dist.prior.kid.int <- lmer(
-  target_dist ~ quality_cond * age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids")
-)
-summary(remix.dist.prior.kid.int)
-drop1(remix.dist.prior.kid.int, test = "Chisq")
-
-remix.dist.prior.kid <- lmer(
-  target_dist ~ quality_cond + age_mo_center +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids")
-)
-summary(remix.dist.prior.kid)
-drop1(remix.dist.prior.kid, test = "Chisq")
-
-
-#### kids vs. adults
-remix.dist.prior.all.int <- lmer(
-  target_dist ~ quality_cond * AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure")
-)
-summary(remix.dist.prior.all.int)
-drop1(remix.dist.prior.all.int, test = "Chisq")
 
 
 
-#### kids vs. adults, main effects
-remix.dist.prior.all <- lmer(
-  target_dist ~ quality_cond + AgeGroup +
-    (1 | id) + (1 | question_cond) + (1 | trial_type),
-  data = df_nonmatch %>% filter(exposure_cond == "exposure")
-)
-summary(remix.dist.prior.all)
-drop1(remix.dist.prior.all, test = "Chisq")
-Confint(remix.dist.prior.all)
+####### Supplement: alternative analyses of reuse ######
+
+df_valid2_bypart <- df_valid2 %>% group_by(id, AgeGroup, AgeGroup_Split, age_mo_center, exposure_cond, exposure_cond_code,
+                                           quality_cond, quality_cond_code, question_cond, question_cond_code) %>%
+  summarize(n_match = sum(target_match == 1, na.rm = T))
+
+### just kids
+reuse.alt.kid.int <- lm(
+  n_match ~ 
+    exposure_cond_code * age_mo_center +
+    quality_cond_code * age_mo_center +
+    question_cond_code * age_mo_center ,
+  data = df_valid2_bypart %>% filter(AgeGroup == "Kids"))
+summary(reuse.alt.kid.int)
+lmtest::lrtest(reuse.alt.kid.int, update(reuse.alt.kid.int, . ~ . - exposure_cond_code:age_mo_center))
+
+
+reuse.alt.kid <- lm(
+  n_match ~ 
+    exposure_cond_code +
+    quality_cond_code * age_mo_center +
+    question_cond_code * age_mo_center ,
+  data = df_valid2_bypart %>% filter(AgeGroup == "Kids"))
+summary(reuse.alt.kid) ## main effect of age
+
+### kids vs. adults
+reuse.alt.all.int <- lm(
+  n_match ~ 
+    exposure_cond_code * AgeGroup_Split +
+    quality_cond_code * AgeGroup_Split +
+    question_cond_code * AgeGroup_Split ,
+  data = df_valid2_bypart)
+summary(reuse.alt.all.int)
+lmtest::lrtest(reuse.alt.all.int, update(reuse.alt.all.int, .~.-exposure_cond_code:AgeGroup_Split)) # likelihood ratio test for lm
+# no interaction
+
+reuse.alt.all <- lm(
+  n_match ~ 
+    exposure_cond_code +
+    quality_cond_code * AgeGroup_Split +
+    question_cond_code * AgeGroup_Split ,
+  data = df_valid2_bypart)
+summary(reuse.alt.all)
+lmtest::lrtest(reuse.alt.all, update(reuse.alt.all, .~.-exposure_cond_code))
+Confint(reuse.alt.all)
+
+
+
+
+####### exploratory for supplement: interaction between exposure and trial type #####
+# why do people reuse less when questions are less informative?
+
+#### tree dist
+exp.trial.all.int1 <- lmer(target_dist ~ 
+                exposure_cond_code*trial_type_code +
+                (exposure_cond_code + 
+                   quality_cond_code +
+                   trial_type_code + 
+                   question_cond_code)*age_group_code + 
+                (1 | id),
+              data = df_nonmatch)
+summary(exp.trial.all.int1)
+anova(exp.trial.all.int1, update(exp.trial.all.int1, . ~ . - exposure_cond_code:trial_type_code))
+Confint(exp.trial.all.int1)
+
+emmeans(exp.trial.all.int1, revpairwise ~ exposure_cond_code | trial_type_code)
+confint(emmeans(exp.trial.all.int1, revpairwise ~ exposure_cond_code | trial_type_code))
+
+sjPlot::plot_model(exp.trial.all.int1, type = "pred", terms = c("trial_type_code", "exposure_cond_code"))
+
+
+##### text-based similarity
+exp.trial.all.int2 <- lmer(target_sim_standard ~ 
+                exposure_cond_code*trial_type_code +
+                (exposure_cond_code + 
+                   quality_cond_code +
+                   trial_type_code + 
+                   question_cond_code)*age_group_code + 
+                (1 | id),
+              data = df_nonmatch)
+summary(exp.trial.all.int2)
+anova(exp.trial.all.int2, update(exp.trial.all.int2, . ~ . - exposure_cond_code:trial_type_code))
+Confint(exp.trial.all.int2)
+
+emmeans(exp.trial.all.int2, revpairwise ~ exposure_cond_code | trial_type_code)
+confint(emmeans(exp.trial.all.int2, revpairwise ~ exposure_cond_code | trial_type_code))
+
+
+
+sjPlot::plot_model(exp.trial.all.int2, type = "pred", terms = c("trial_type_code", "exposure_cond_code"))
+
 

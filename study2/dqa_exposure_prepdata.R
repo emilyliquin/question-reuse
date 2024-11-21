@@ -33,8 +33,7 @@ df2$AgeGroup_Split <- as.factor(ifelse(df2$age_yr %in% c(5, 6),
                                               ifelse(df2$age_yr %in% c(9, 10),
                                                      "9- to 10-year-olds", "Adults"
                                               )
-                                       )
-))
+                                       )))
 
 
 
@@ -93,6 +92,7 @@ hist(df2$target_dist)
 # create variables
 df2$same_as_last <- NA
 df2$sim_to_last_standard <- NA
+df2$dist_to_last <- NA
 df2$prev_trial_indices_reuse <- NA
 df2$prev_trial_indices_remixing <- NA
 
@@ -113,9 +113,11 @@ for(i in 1:nrow(df2)){
       
       if(nrow(last_trial_nonreused) >= 1){ #if there are any remaining questions
         last_trial_nonreused <- last_trial_nonreused %>% rowwise() %>%
-          mutate(textsimstandard = get_text_sim(question_standard, row$question_standard)) #get similarity to current question
+          mutate(textsimstandard = get_text_sim(question_standard, row$question_standard),
+                 disttolast = get_sim(as.character(question_program), as.character(row$question_program))) #get similarity to current question
         
         df2[i, "sim_to_last_standard"] <- max(last_trial_nonreused$textsimstandard) #most similar
+        df2[i, "dist_to_last"] <- min(last_trial_nonreused$disttolast) #most similar (min dist)
         
       }
       

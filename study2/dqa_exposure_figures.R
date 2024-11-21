@@ -3,6 +3,7 @@ library(ggbeeswarm)
 library(ggpubr)
 library(see)
 library(ggridges)
+library(rsample)
 
 setwd(this.path::here())
 
@@ -36,6 +37,7 @@ df_valid2$AgeGroup <- fct_recode(df_valid2$AgeGroup,
                                  Children = "Kids",
                                  Adults = "Adults")
 
+df_valid2$exposure_cond <- factor(df_valid2$exposure_cond, levels = c("exposure", "baseline"))
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 # see https://www.r-bloggers.com/2018/08/bootstrapping-clustered-data/amp/
@@ -53,28 +55,72 @@ cis <- bs_summary %>% group_by(AgeGroup, exposure_cond) %>%
             ci_hi = quantile(mReuse, 0.975))
 cis
 
-p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup, fill = exposure_cond, group = exposure_cond)) + 
+p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup, color = exposure_cond, group = exposure_cond)) + 
   # geom_bar(aes(fill = factor(target_match)), position = "fill") + 
   # facet_grid(.~AgeGroup) + 
-  theme_classic(base_size = 9) + 
+  theme_classic(base_size = 7) + 
   stat_summary(aes(y = as.numeric(as.character(target_match))), 
-               fun.data = "mean_cl_boot", geom = "bar", position = position_dodge(0.9)) +
-  geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
-                width = 0.2, position = position_dodge(0.9), color = "black") +
+               fun.data = "mean_cl_boot", shape = 5, size = 2,
+               geom= "point", position = position_dodge(0.4)) +
+  geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, ymin = ci_lo, ymax = ci_hi, 
+                                          color = exposure_cond), 
+                width = 0.2, position = position_dodge(0.4)) +
   
-  ylab("Proportion of Questions\nMatching Target") +
+  ylab("Proportion of Questions\nMatching Target Question") +
   xlab("Age Group") + 
-  theme(legend.position = "top") + 
+  theme(legend.position = "right") + 
   # scale_fill_manual(values = c("#EECC66", "#6699CC"), 
   #                   name = "Match to Target Question", labels = c("Non-Match", "Match")) + 
-  scale_fill_manual(values = c("#F9DC5C", "#7D8570"), 
-                    name = "Condition", labels = c("No-Exposure", "Exposure")) +
-  ylim(0, 1)+
-  coord_cartesian(ylim = c(0, 0.35))
+  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+                    name = "Condition", labels = c("No-Exposure", "Exposure"),
+                    breaks = c("baseline", "exposure")
+                    ) +
+  coord_flip(ylim = c(0, 0.4)) + 
+  ggtitle("The Reuse Effect")
 p
 
+##### recombination: tree edit distance
 df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
 
+# get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
+df_nest <- df_nonmatch %>% nest(data = -id)
+set.seed(4586465)
+bs <- bootstraps(df_nest, times = 1000)
+bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
+                    group_by(AgeGroup, exposure_cond) %>% 
+                    summarize(mRemixing = mean(target_dist))) %>% 
+  bind_rows(.id = 'boots')
+
+cis <- bs_summary %>% group_by(AgeGroup, exposure_cond) %>%
+  summarize(ci_lo = quantile(mRemixing, 0.025),
+            ci_hi = quantile(mRemixing, 0.975))
+cis
+
+p2 <- ggplot() + 
+  # geom_quasirandom(aes(x = AgeGroup), alpha = 0.1, dodge.width=0.8, size = 0.1) +
+  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup, y = target_dist, color = exposure_cond, group = exposure_cond),
+               fun.data = "mean_cl_boot",  shape = 5, size = 2,
+               geom= "point", position = position_dodge(0.4)) + 
+  geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
+                width = 0.2, position = position_dodge(0.4)) +
+  theme_classic(base_size = 7) + 
+  ylab("Tree Edit Distance\nto Target Question") +
+  xlab("") + 
+  theme(
+    legend.position = "right") +
+  scale_x_discrete(breaks = c("Children", "Adults"), labels = c("Children", "Adults")) + 
+  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+                     name = "Condition", labels = c("No-Exposure", "Exposure"),
+                     breaks = c("baseline", "exposure")
+  ) +
+  coord_flip(ylim = c(4, 11)) + xlab("Age Group") + 
+  ggtitle("The Recombination Effect\n(Tree Edit Distance)")
+
+p2
+
+
+
+##### recombination: semantic similarity
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_nest <- df_nonmatch %>% nest(data = -id)
 set.seed(238921)
@@ -89,25 +135,31 @@ cis <- bs_summary %>% group_by(AgeGroup, exposure_cond) %>%
             ci_hi = quantile(mRemixing, 0.975))
 cis
 
-p2 <- ggplot() + 
+p3 <- ggplot() + 
   # geom_quasirandom(aes(x = AgeGroup), alpha = 0.1, dodge.width=0.8, size = 0.1) +
-  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup, y = target_sim_standard, fill = exposure_cond, group = exposure_cond),
-               fun.data = "mean_cl_boot", geom = "bar", position = position_dodge(0.9), size = 3) + 
-  geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
-                width = 0.2, position = position_dodge(0.9), color = "black") +
-  theme_classic(base_size = 9) + 
-  ylab("Similarity to\nTarget Question") +
+  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup, y = target_sim_standard, color = exposure_cond, group = exposure_cond),
+               fun.data = "mean_cl_boot",  shape = 5, size = 2,
+               geom= "point", position = position_dodge(0.4)) + 
+  geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
+                width = 0.2, position = position_dodge(0.4)) +
+  theme_classic(base_size = 7) + 
+  ylab("Text-Based Semantic Similarity\nto Target Question") +
   xlab("") + 
   theme(
     legend.position = "right") +
   scale_x_discrete(breaks = c("Children", "Adults"), labels = c("Children", "Adults")) + 
-  scale_fill_manual(values = c("#F9DC5C", "#7D8570"), 
-                    name = "Condition", labels = c("No-Exposure", "Exposure")) +
-  coord_cartesian(ylim = c(0.62, 0.72)) + xlab("Age Group")
-p2
+  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+                     name = "Condition", labels = c("No-Exposure", "Exposure"),
+                     breaks = c("baseline", "exposure")
+  ) +
+  coord_flip(ylim = c(0.62, 0.72)) + xlab("Age Group") + 
+  ggtitle("The Recombination Effect\n(Text-Based Similarity)")
 
-ggarrange(p, p2, labels = c("A", "B"), align = "hv", common.legend = TRUE, legend = "top") %>%
-  ggsave(filename = "figures/Study2_ReuseRemixing.pdf", width = 6.5, height = 3, units = "in")
+p3
+
+library(patchwork)
+((p / plot_spacer()/ (p2 + p3)) + plot_layout(guides = 'collect', heights = c(8, 1, 8))) %>%
+  ggsave(filename = "figures/Study2_ReuseRemixing.pdf", width = 5.5, height = 4, units = "in")
 
 
 ###### reuse sensitivity to context ######
@@ -140,24 +192,27 @@ cis
 
 
 p3 <- ggplot(df_valid2 %>% filter(exposure_cond == "exposure"), aes(x = trial_type)) + 
-  facet_grid(.~AgeGroup) +
-  theme_classic(base_size = 9) + 
+  facet_wrap(~AgeGroup, scales = "free") +
+  theme_classic(base_size = 7) + 
   stat_summary(aes(y = as.numeric(as.character(target_match))), 
-               fun.data = "mean_cl_boot", geom = "bar", fill = "#7D8570") +
+               fun.data = "mean_cl_boot", geom = "point", color = "#882255",
+               shape = 5, size = 2) +
   geom_errorbar(data = cis, mapping = aes(x = trial_type, ymin = ci_lo, ymax = ci_hi), 
-                width = 0.2, position = position_dodge(0.9), color = "black") +
-  ylab("Proportion of Questions\nMatching Target") +
+                width = 0.2, position = position_dodge(0.9), color = "#882255") +
+  ylab("Proportion of Questions\nMatching Target Question") +
   xlab("Trial Type (Within Exposure Condition)") + 
-  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust=1),
-        legend.position = "top") + ylim(0, 1) + 
-  coord_cartesian(ylim = c(0, 0.65))
+  theme(legend.position = "top") + ylim(0, 1) + 
+  coord_flip(ylim = c(0, 0.65)) +
+  ggtitle("Context-Specific Variation in Reuse")
 p3
 
 
-ggsave(p3, filename = "figures/Study2_ReuseContext.pdf", width = 6.5, height = 3, units = "in")
+ggsave(p3, filename = "figures/Study2_ReuseContext.pdf", width = 5.5, height = 2.5, units = "in")
 
 
 ###### EIG #####
+
+df_valid2$exposure_cond <- factor(df_valid2$exposure_cond, levels = c("baseline", "exposure"))
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_valid_nest <- df_valid2 %>% nest(data = -id)
@@ -182,13 +237,14 @@ p2 <- ggplot(df_valid2) +
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup, ymin = ci_lo, 
                                           ymax = ci_hi, color = exposure_cond),
                 width = 0.1, position = position_dodge(0.7)) + 
-  theme_classic(base_size = 9) +
+  theme_classic(base_size = 7) +
   scale_x_discrete(labels = c("Children", "Adults")) + 
   xlab("Age Group") + 
   ylab("Expected Information Gain") +
-  scale_color_manual(values = c("#F9DC5C", "#7D8570"), 
-                     name = "Condition", labels = c("No-Exposure", "Exposure")) + 
-  theme(legend.position = "top")
+  scale_color_manual(values = c("#0000FFA0","#882255"),
+                     name = "Condition", labels = c("No-Exposure", "Exposure")) +
+  theme(legend.position = "top") + 
+  ggtitle("Question Informativeness")
 p2
 
 ggsave(p2, filename = "figures/Study2_EIG.pdf", width = 3.5, height = 3, units = "in")
@@ -226,16 +282,16 @@ cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
 
 
 reuse_1 <- ggplot(sim_reuse_df) + 
-  stat_density_ridges(aes(x = reuse_rate, y = " Trial-matched simulations", fill = factor(stat(quantile))),
+  stat_density_ridges(aes(x = reuse_rate, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
-                      scale = 0.025,
+                      scale = 0.022,
                       rel_min_height = .01
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
-  ) + theme_classic(base_size = 9) +
+  ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec, 
                aes(x = same_as_last, y = AgeGroup_Split, color = AgeGroup_Split), 
                fun.data = "mean_cl_boot", 
@@ -247,9 +303,10 @@ reuse_1 <- ggplot(sim_reuse_df) +
   scale_color_manual(values = c("#9190A2", "#67667A", "#403F4C", "#E84855"), 
                      name = "Age Group") + 
   theme(legend.position = "none") + 
-  ylab("") + 
-  xlab("Across-Trial Reuse") +
-  coord_cartesian(xlim = c(0, 0.6))
+  ylab("Group") + 
+  xlab("Proportion of Questions\nMatching a Previous Question") +
+  coord_cartesian(xlim = c(0, 0.6)) + 
+  ggtitle("Across-Trial Reuse")
 reuse_1
 
 
@@ -257,6 +314,49 @@ reuse_1
 
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == "0")
 
+##### tree edit distance
+df_nest <- df_seq_consec_nonmatch %>% nest(data = -id)
+set.seed(45465)
+bs <- bootstraps(df_nest, times = 1000)
+bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
+                    group_by(AgeGroup_Split) %>% 
+                    summarize(mRemixing = mean(dist_to_last, na.rm = TRUE))) %>% 
+  bind_rows(.id = 'boots')
+
+cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
+  summarize(ci_lo = quantile(mRemixing, 0.025),
+            ci_hi = quantile(mRemixing, 0.975))
+
+
+remixing_1 <- ggplot(sim_remixing_df) + 
+  stat_density_ridges(aes(x = treedist_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
+                      geom = "density_ridges_gradient",
+                      calc_ecdf = TRUE,
+                      quantiles = c(0.025, 0.975),
+                      scale = 0.5,
+                      rel_min_height = .01
+  ) +
+  scale_fill_manual(
+    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+  ) + theme_classic(base_size = 7) +
+  stat_summary(data = df_seq_consec_nonmatch, 
+               aes(x = dist_to_last, y = AgeGroup_Split, color = AgeGroup_Split), 
+               fun.data = "mean_cl_boot", 
+               shape = 5, size = 2,
+               geom= "point") +
+  geom_errorbar(data = cis, mapping = aes(y = AgeGroup_Split, xmin = ci_lo, 
+                                          xmax = ci_hi, color = AgeGroup_Split),
+                width = 0.1) +
+  scale_color_manual(values = c("#9190A2", "#67667A", "#403F4C", "#E84855"), 
+                     name = "Age Group") + 
+  theme(legend.position = "none") + 
+  ylab("Group") + 
+  xlab("Tree Edit Distance to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0, 11)) +
+  ggtitle("Across-Trial Recombination\n(Tree Edit Distance)")
+remixing_1
+
+#### text-based semantic sim
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_nest <- df_seq_consec_nonmatch %>% nest(data = -id)
@@ -272,19 +372,19 @@ cis <- bs_summary %>% group_by(AgeGroup) %>%
             ci_hi = quantile(mRemixing, 0.975))
 
 
-hist(sim_remixing_df$remixing_mean)
+hist(sim_remixing_df$textsim_mean)
 
-remixing_1 <- ggplot(sim_remixing_df) + 
-  stat_density_ridges(aes(x = remixing_mean, y = " Trial-matched simulations", fill = factor(stat(quantile))),
+remixing_2 <- ggplot(sim_remixing_df) + 
+  stat_density_ridges(aes(x = textsim_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
-                      scale = 0.005,
+                      scale = 0.008,
                       rel_min_height = .01
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
-  ) + theme_classic(base_size = 9) +
+  ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
                aes(x = sim_to_last_standard, y = AgeGroup, color = AgeGroup), 
                fun.data = "mean_cl_boot", 
@@ -297,12 +397,13 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Across-Trial Remixing") +
-  coord_cartesian(xlim = c(0.65, 0.78))
-remixing_1
+  xlab("Text-Based Semantic Similarity to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0.63, 0.8)) + 
+  ggtitle("Across-Trial Recombination\n(Text-Based Similarity)")
+remixing_2
 
 
+((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8))) %>%
+  ggsave(filename = "figures/Study2_ReuseRemixing_Trials.pdf", width = 5.5, height = 4, units = "in")
 
-ggarrange(reuse_1, remixing_1, labels = c("A", "B")) %>%
-  ggsave(filename = "figures/Study2_ReuseRemixing_Trials.pdf", width = 6.5, height = 2.5, units = "in")
 
