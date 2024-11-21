@@ -60,10 +60,14 @@ df <- df %>% select(!question_cleaned)
 #### text similarity script
 source_python("../monsters_pyscripts/textsim_sbert.py")
 
+#### tree edit distance script
+source_python("../monsters_pyscripts/distance.py")
+
 
 # create variables
 df$same_as_last <- NA
 df$sim_to_last_standard <- NA
+df$dist_to_last <- NA
 df$prev_trial_indices_reuse <- NA
 df$prev_trial_indices_remixing <- NA
 
@@ -85,10 +89,12 @@ for(i in 1:nrow(df)){
       
       if(nrow(last_trial_nonreused) >= 1){ #if there are any remaining questions
         last_trial_nonreused <- last_trial_nonreused %>% rowwise() %>%
-          mutate(textsimstandard = get_text_sim(question_standard, row$question_standard)) #get similarity to current question
+          mutate(textsimstandard = get_text_sim(question_standard, row$question_standard),
+                 disttolast = get_sim(as.character(question_program), as.character(row$question_program))) #get similarity to current question
         
         df[i, "sim_to_last_standard"] <- max(last_trial_nonreused$textsimstandard) #most similar
-
+        df[i, "dist_to_last"] <- min(last_trial_nonreused$disttolast) #most similar (min dist)
+        
       }
       # save which trials were valid for analysis of reuse and remixing
       df[i, "prev_trial_indices_reuse"] <- paste0(last_trial$trial_index, collapse = ",")
@@ -106,5 +112,5 @@ df <- df %>% relocate(AgeGroup_Split, .after=AgeGroup)
 
 
 # uncomment to rewrite data
-# write_csv(df, "data/dqa_baseline_preppeddata.csv")
+write_csv(df, "data/dqa_baseline_preppeddata.csv")
 

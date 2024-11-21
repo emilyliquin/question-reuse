@@ -114,11 +114,12 @@ sim_reuse_df <- data.frame(sim_number = 1:n_sim, reuse_rate = sim_reuse_rates)
 ## ----simulating remixing--------------------------------------------------------------------------------------
 
 source_python("../monsters_pyscripts/textsim_sbert_multi.py")
+source_python("../monsters_pyscripts/distance.py")
 
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last != 1)
 
 # structure to match
-to_match_remixing <- df_seq_consec_nonmatch[,c("trial_index", "question_abstracted_idealized", "question_standard", "prev_trial_indices_remixing", "AgeGroup", "r_shape", "r_legs", "b_shape", "b_legs", "p_shape", "p_legs")]
+to_match_remixing <- df_seq_consec_nonmatch[,c("trial_index", "question_program", "question_abstracted_idealized", "question_standard", "prev_trial_indices_remixing", "AgeGroup", "r_shape", "r_legs", "b_shape", "b_legs", "p_shape", "p_legs")]
 
 
 #function to match trial structure w/ random previous questions and check remixing row by row
@@ -141,26 +142,30 @@ sim_remixing <- function(i){
   
   # get similarity between current question and sampled previous questions
   sims <- get_text_sim_multi(row$question_standard, prev_trial_sample$question_standard) %>% unlist()
+  dists <- get_sim_multi(row$question_program, prev_trial_sample$question_program) %>% unlist()
   
-  return(max(sims)) #most similar of previous trials
+  return(c(max(sims), min(dists))) #most similar of previous trials
 }
 
 #function that we'll use to repeat this for the entire dataframe (returns by-simulation reuse rate)
 remixing_rep <- function(t){
   print(t)
   # apply to each row of dataset
-  prev_sims <- lapply(1:nrow(to_match_remixing), sim_remixing) %>% unlist()
+  prev_sims <- lapply(1:nrow(to_match_remixing), sim_remixing)
+  sims <- map(prev_sims, 1) %>% unlist()
+  dists <- map(prev_sims, 2) %>% unlist()
   #for each simulated dataset, we want the mean similarity 
-  return(mean(prev_sims))
+  return(c(mean(sims), mean(dists)))
 }
 
 
 # run simulations to generate permuted data -- can't parallelize this one without breaking
 set.seed(21042)
-sim_remixing_out <- lapply(1:n_sim, remixing_rep) %>% unlist()
+sim_remixing_out <- lapply(1:n_sim, remixing_rep)
 
 sim_remixing_df <- data.frame(sim_number = 1:n_sim,
-                              remixing_mean = sim_remixing_out)
+                              textsim_mean = map(sim_remixing_out, 1) %>% unlist(),
+                              treedist_mean = map(sim_remixing_out, 2) %>% unlist())
 
 
 # cache data
