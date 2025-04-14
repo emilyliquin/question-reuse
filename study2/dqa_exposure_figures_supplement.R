@@ -7,6 +7,7 @@ library(ggbeeswarm)
 library(ggpubr)
 library(see)
 library(ggridges)
+library(rsample)
 
 setwd(this.path::here())
 
@@ -78,11 +79,15 @@ p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup_Split, 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
-  coord_flip(ylim = c(0, 0.4)) + 
+  coord_flip(ylim = c(0, 1)) + 
   ggtitle("The Reuse Effect")
 p
 
 ##### recombination: tree edit distance
+## norm
+df_valid2$target_dist_normed <- 1-df_valid2$target_dist/max(df_valid2$target_dist, na.rm = T)
+
+
 df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
@@ -91,7 +96,7 @@ set.seed(4586465)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
                     group_by(AgeGroup_Split, exposure_cond) %>% 
-                    summarize(mRemixing = mean(target_dist))) %>% 
+                    summarize(mRemixing = mean(target_dist_normed))) %>% 
   bind_rows(.id = 'boots')
 
 cis <- bs_summary %>% group_by(AgeGroup_Split, exposure_cond) %>%
@@ -101,13 +106,13 @@ cis
 
 p2 <- ggplot() + 
   # geom_quasirandom(aes(x = AgeGroup_Split), alpha = 0.1, dodge.width=0.8, size = 0.1) +
-  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup_Split, y = target_dist, color = exposure_cond, group = exposure_cond),
+  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup_Split, y = target_dist_normed, color = exposure_cond, group = exposure_cond),
                fun.data = "mean_cl_boot",  shape = 5, size = 2,
                geom= "point", position = position_dodge(0.4)) + 
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup_Split, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
                 width = 0.2, position = position_dodge(0.4)) +
   theme_classic(base_size = 7) + 
-  ylab("Tree Edit Distance\nto Target Question") +
+  ylab("Grammar-Based Similarity\nto Target Question") +
   xlab("") + 
   theme(
     legend.position = "right") +
@@ -115,8 +120,8 @@ p2 <- ggplot() +
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
-  coord_flip(ylim = c(4, 11)) + xlab("Age Group") + 
-  ggtitle("The Recombination Effect\n(Tree Edit Distance)")
+  coord_flip(ylim = c(0.65, 0.9)) + xlab("Age Group") + 
+  ggtitle("The Recombination Effect\n(Grammar-Based Similarity)")
 
 p2
 
@@ -145,7 +150,7 @@ p3 <- ggplot() +
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup_Split, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
                 width = 0.2, position = position_dodge(0.4)) +
   theme_classic(base_size = 7) + 
-  ylab("Text-Based Semantic Similarity\nto Target Question") +
+  ylab("Text-Based Similarity\nto Target Question") +
   xlab("") + 
   theme(
     legend.position = "right") +
@@ -153,7 +158,7 @@ p3 <- ggplot() +
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
-  coord_flip(ylim = c(0.62, 0.72)) + xlab("Age Group") + 
+  coord_flip(ylim = c(0.60, 0.75)) + xlab("Age Group") + 
   ggtitle("The Recombination Effect\n(Text-Based Similarity)")
 
 p3

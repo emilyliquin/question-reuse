@@ -89,7 +89,7 @@ table(by_part_trials$AgeGroup, by_part_trials$n_valid_trials)
 excl.mod.kid <- glmer(trouble_response ~ age_mo + (1|id) + (1|trial_index), 
                       data = df2 %>% filter(AgeGroup == "Kids"),
                       family = "binomial")
-anova(excl.mod.kid, update(excl.mod.kid, . ~ . - age_mo))
+anova(excl.mod.kid, update(excl.mod.kid, . ~ . - age_mo)) # significant age effect in kids
 
 excl.mod.all <- glmer(trouble_response ~ AgeGroup_Split + (1|id) + (1|trial_index), 
                       data = df2,
@@ -122,6 +122,9 @@ summary_final_sample <- df_valid2 %>% group_by(AgeGroup) %>%
 summary_final_sample
 
 
+## norm tree edit distance
+df_valid2$target_dist_normed <- 1-df_valid2$target_dist/max(df_valid2$target_dist, na.rm = T)
+df_valid2$dist_to_last_normed <- 1-df_valid2$dist_to_last/max(df_valid2$dist_to_last, na.rm = T)
 
 ##### for supplement: answering the target question correctly #####
 
@@ -129,11 +132,6 @@ df_valid2$answer_correct <- ifelse(df_valid2$exp_answer_response == df_valid2$ex
 
 answerdf <- df_valid2 %>% group_by(id, exposure_cond, question_cond, AgeGroup, AgeGroup_Split, age_mo_center) %>%
   summarize(answer_correct = answer_correct[1])
-
-ggplot(answerdf, aes(x = AgeGroup_Split, y = answer_correct, color = question_cond)) + 
-  stat_summary(fun.data = "mean_cl_boot", position = position_dodge(0.9)) + 
-  theme_classic() + 
-  coord_cartesian(ylim = c(0, 1))
 
 practiceans.kid.int <- glm(answer_correct ~ age_mo_center*question_cond, 
           data = answerdf, family = "binomial")
@@ -233,6 +231,7 @@ reuse.kids <- glmer(
   family = "binomial", control = glmerControl(optimizer = "bobyqa",
                                               optCtrl=list(maxfun=100000)))
 summary(reuse.kids) # no sig. effect of age at p < .01 level (p = .02)
+# just do kids vs. adults for main analysis
 
 
 reuse.all.int <- glmer(target_match ~ 
@@ -271,7 +270,7 @@ mod_results <- tidy(reuse.all, conf.int = T, exponentiate = TRUE)
 mod_results <- mod_results %>% filter(effect == "fixed")
 
 
-stargazer(reuse.all, type = "latex",
+stargazer(reuse.all, type = "text",
           dep.var.labels = "Match to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
@@ -289,6 +288,7 @@ stargazer(reuse.all, type = "latex",
                                "Age Group [Adults] : Trial Type [Too-Complex]",
                                "Age Group [Adults] : Question Condition [Legs]",
                                "Intercept"))
+
 
 
 ######## Reuse -- is there an effect of previous and current informativeness, in exposure condition? ###########
@@ -330,7 +330,8 @@ context.kid <- glmer(
     (1 | id),
   data = df_valid2 %>% filter(exposure_cond == "exposure" & AgeGroup == "Kids"),
   family = "binomial", control = glmerControl(optimizer = "bobyqa"))
-summary(context.kid) # effect of age not significant at p < .01 level
+summary(context.kid) # effect of age not significant at preregistered p < .01 level
+# so just do kids vs. adults for main analysis
 
 ### kids vs adults
 context.all.int <- glmer(target_match ~ 
@@ -362,7 +363,7 @@ mod_results <- tidy(context.all, conf.int = T, exponentiate = TRUE)
 mod_results <- mod_results %>% filter(effect == "fixed")
 
 
-stargazer(context.all, type = "latex",
+stargazer(context.all, type = "text",
           dep.var.labels = "Match to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
@@ -380,7 +381,6 @@ stargazer(context.all, type = "latex",
 
 
 
-
 ######## Recombination -- is there an effect of exposure? ############
 
 # just non-target-matching questions
@@ -390,7 +390,7 @@ df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
 
 #### just in kids
 recomb.kid.int1 <- lmer(
-  target_dist ~ 
+  target_dist_normed ~ 
     exposure_cond_code * age_mo_center +
     quality_cond_code * age_mo_center +
     trial_type_code * age_mo_center +
@@ -398,10 +398,10 @@ recomb.kid.int1 <- lmer(
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
 summary(recomb.kid.int1)
-anova(recomb.kid.int1, update(recomb.kid.int1, . ~ . - exposure_cond_code:age_mo_center))
+anova(recomb.kid.int1, update(recomb.kid.int1, . ~ . - exposure_cond_code:age_mo_center)) # no interaction
 
 recomb.kid1 <- lmer(
-  target_dist ~ 
+  target_dist_normed ~ 
     exposure_cond_code  +
     quality_cond_code * age_mo_center +
     trial_type_code * age_mo_center +
@@ -409,9 +409,10 @@ recomb.kid1 <- lmer(
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
 summary(recomb.kid1) # no significant effect of age
+# so just kids vs. adults for main analysis
 
 
-recomb.all.int1 <- lmer(target_dist ~ 
+recomb.all.int1 <- lmer(target_dist_normed ~ 
                 exposure_cond_code * age_group_code +
                 quality_cond_code * age_group_code + 
                 trial_type_code * age_group_code + 
@@ -422,7 +423,7 @@ summary(recomb.all.int1)
 anova(recomb.all.int1, update(recomb.all.int1, . ~ . - exposure_cond_code:age_group_code))
 
 
-recomb.all1 <- lmer(target_dist ~ 
+recomb.all1 <- lmer(target_dist_normed ~ 
                 exposure_cond_code +
                 quality_cond_code * age_group_code + 
                 trial_type_code * age_group_code + 
@@ -437,7 +438,7 @@ Confint(recomb.all1)
 confint(emm)
 
 ##### make full regression table for supplement
-recomb.all1 <- lme4::lmer(target_dist ~ 
+recomb.all1 <- lme4::lmer(target_dist_normed ~ 
              exposure_cond_code +
              quality_cond_code * age_group_code + 
              trial_type_code * age_group_code + 
@@ -447,7 +448,7 @@ recomb.all1 <- lme4::lmer(target_dist ~
 
 
 stargazer(recomb.all1, type = "text",
-          dep.var.labels = "Tree edit distance from target question",
+          dep.var.labels = "Grammar-based similarity to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
           covariate.labels = c("Exposure Condition [Exposure]",
@@ -480,10 +481,9 @@ recomb.kid.int2 <- lmer(
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
 summary(recomb.kid.int2)
-anova(recomb.kid.int2, update(recomb.kid.int2, . ~ . - exposure_cond_code: age_mo_center))
+anova(recomb.kid.int2, update(recomb.kid.int2, . ~ . - exposure_cond_code: age_mo_center)) # no interaction
 
 
-#### no interactions
 recomb.kid2 <- lmer(
   target_sim_standard ~ 
     exposure_cond_code +
@@ -493,7 +493,7 @@ recomb.kid2 <- lmer(
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" ))
 summary(recomb.kid2) # age not sig. at p<.01 level
-
+# so just kids vs. adults for next analysis
 
 
 
@@ -517,7 +517,7 @@ recomb.all2 <- lmer(target_sim_standard ~
               data = df_nonmatch)
 summary(recomb.all2)
 anova(recomb.all2, update(recomb.all2, . ~ . - exposure_cond_code))
-Confint(recomb.all2)
+Confint(recomb.all2) 
 
 
 (emm <- emmeans(recomb.all2, revpairwise ~ age_group_code))
@@ -536,7 +536,7 @@ recomb.all2 <- lme4::lmer(target_sim_standard ~
 
 
 stargazer(recomb.all2, type = "text",
-          dep.var.labels = "Text-based semantic similarity",
+          dep.var.labels = "Text-based similarity to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
           covariate.labels = c("Exposure Condition [Exposure]",
@@ -562,7 +562,7 @@ stargazer(recomb.all2, type = "text",
 
 #### just in kids
 recomb.context.kid.int1 <- lmer(
-  target_dist ~ 
+  target_dist_normed ~ 
     quality_cond_code * age_mo_center +
     trial_type_code * age_mo_center +
     question_cond_code * age_mo_center +
@@ -574,16 +574,17 @@ anova(recomb.context.kid.int1,
 #no significant interaction
 
 recomb.context.kid1 <- lmer(
-  target_dist ~ 
+  target_dist_normed ~ 
     quality_cond_code +
     trial_type_code * age_mo_center +
     question_cond_code * age_mo_center +
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" & exposure_cond == "exposure"))
 summary(recomb.context.kid1) # no sig. effect of age
+# so just age group kids vs. adults in main analysis
 
 ### kids vs. adults
-recomb.context.all.int1 <- lmer(target_dist ~ 
+recomb.context.all.int1 <- lmer(target_dist_normed ~ 
                 quality_cond_code * age_group_code + 
                 trial_type_code * age_group_code + 
                 question_cond_code * age_group_code +
@@ -594,7 +595,7 @@ anova(recomb.context.all.int1,
       update(recomb.context.all.int1, . ~ . - quality_cond_code: age_group_code))
 
 
-recomb.context.all1 <- lmer(target_dist ~ 
+recomb.context.all1 <- lmer(target_dist_normed ~ 
                 quality_cond_code + 
                 trial_type_code * age_group_code + 
                 question_cond_code * age_group_code +
@@ -609,7 +610,7 @@ Confint(recomb.context.all1)
 
 ##### make full regression table for supplement
 # this is also used to show the effect of trial type (exploratory)
-recomb.context.all1 <- lme4::lmer(target_dist ~ 
+recomb.context.all1 <- lme4::lmer(target_dist_normed ~ 
                    quality_cond_code + 
                    trial_type_code * age_group_code + 
                    question_cond_code * age_group_code +
@@ -617,8 +618,8 @@ recomb.context.all1 <- lme4::lmer(target_dist ~
                  data = df_nonmatch %>% filter(exposure_cond == "exposure"))
 
 
-stargazer(recomb.context.all1, type = "latex",
-          dep.var.labels = "Tree edit distance",
+stargazer(recomb.context.all1, type = "text",
+          dep.var.labels = "Grammar-based similarity to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
           covariate.labels = c("Previous Quality Condition [Previously Informative]",
@@ -656,9 +657,10 @@ recomb.context.kid2 <- lmer(
     question_cond_code * age_mo_center +
     (1 | id),
   data = df_nonmatch %>% filter(AgeGroup == "Kids" & exposure_cond == "exposure" ))
-summary(recomb.context.kid2) # no effect of age
+summary(recomb.context.kid2) # no effect of age - so just kids vs. adults in main analysis
 
 
+# main analysis
 recomb.context.all.int2 <- lmer(target_sim_standard ~ 
                 quality_cond_code * age_group_code + 
                 trial_type_code * age_group_code + 
@@ -691,8 +693,8 @@ recomb.context.all2 <- lme4::lmer(target_sim_standard ~
                  data = df_nonmatch %>% filter(exposure_cond == "exposure"))
 
 
-stargazer(recomb.context.all2, type = "latex",
-          dep.var.labels = "Text-based semantic similarity",
+stargazer(recomb.context.all2, type = "text",
+          dep.var.labels = "Text-based similarity to target question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
           covariate.labels = c("Previous Quality Condition [Previously Informative]",
@@ -734,9 +736,9 @@ eig.kid <- lmer(
     question_cond_code * age_mo_center +
     (1 | id),
   data = df_valid2 %>% filter(AgeGroup == "Kids" ))
-summary(eig.kid) # no effect of age
+summary(eig.kid) # no effect of age - just kids vs. adults for main analysis
 
-
+# main analysis
 eig.all.int <- lmer(EIG ~ 
                  exposure_cond_code * age_group_code +
                  quality_cond_code * age_group_code + 
@@ -772,7 +774,7 @@ eig.all <- lme4::lmer(EIG ~
                  data = df_valid2)
 
 
-stargazer(eig.all, type = "latex",
+stargazer(eig.all, type = "text",
           dep.var.labels = "EIG",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
@@ -845,7 +847,7 @@ exp(Confint(reusetrials.all))
 mod_results <- tidy(reusetrials.all, conf.int = T, exponentiate = TRUE)
 mod_results <- mod_results %>% filter(effect == "fixed")
 
-stargazer(reusetrials.all, type = "latex",
+stargazer(reusetrials.all, type = "text",
           dep.var.labels = "Match to any previously-asked question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"),
@@ -863,13 +865,13 @@ df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == 0)
 
 
 ### dist_to_last (tree edit dist)
-remixingtrials.kid <- lmer(dist_to_last ~ age_mo_center + (1|id), 
+remixingtrials.kid <- lmer(dist_to_last_normed ~ age_mo_center + (1|id), 
                            data = df_seq_consec_nonmatch %>% filter(AgeGroup == "Kids"),
                            control = lmerControl(optimizer = "bobyqa"))
 summary(remixingtrials.kid)
 anova(remixingtrials.kid, update(remixingtrials.kid, .~.-age_mo_center)) # effect of age
 
-remixingtrials.all <- lmer(dist_to_last ~ AgeGroup_Split + (1|id), 
+remixingtrials.all <- lmer(dist_to_last_normed ~ AgeGroup_Split + (1|id), 
                            data = df_seq_consec_nonmatch, control = lmerControl(optimizer = "bobyqa"))
 summary(remixingtrials.all)
 anova(remixingtrials.all, update(remixingtrials.all, .~.-AgeGroup_Split)) # effect of age
@@ -877,11 +879,11 @@ Confint(remixingtrials.all)
 
 
 ##### make full regression table for supplement
-m1 <- lme4::lmer(dist_to_last ~ AgeGroup_Split + (1|id), 
+m1 <- lme4::lmer(dist_to_last_normed ~ AgeGroup_Split + (1|id), 
                            data = df_seq_consec_nonmatch, control = lmerControl(optimizer = "bobyqa"))
 
-stargazer(m1, type = "latex",
-          dep.var.labels = "Tree edit distance to least-distance previous question",
+stargazer(m1, type = "text",
+          dep.var.labels = "Grammar-based similarity to most-similar previous question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"), 
           covariate.labels = c("Age Group [7- to 8-year-olds]", 
@@ -909,6 +911,8 @@ Confint(remixingtrials.all)
 sim_reuse_df <- read_csv("simulations/dqa_exposure_reuse.csv")
 sim_remixing_df <- read_csv("simulations/dqa_exposure_remixing.csv")
 
+# norm tree edit distance to same scale as true data
+sim_remixing_df$treedist_mean_normed <- 1 - sim_remixing_df$treedist_mean/max(df_seq_consec$dist_to_last, na.rm = T)
 
 
 # we've simulated 1000 new datasets, where the paired trials match the paired 
@@ -940,7 +944,7 @@ df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == 0)
 
 
 ## tree edit distance 
-mean_dist <- tapply(df_seq_consec_nonmatch$dist_to_last, df_seq_consec_nonmatch$AgeGroup_Split, mean)
+mean_dist <- tapply(df_seq_consec_nonmatch$dist_to_last_normed, df_seq_consec_nonmatch$AgeGroup_Split, mean)
 mean_dist
 
 ## text similarity, standardized
@@ -948,10 +952,10 @@ mean_sim_standard <- tapply(df_seq_consec_nonmatch$sim_to_last_standard, df_seq_
 mean_sim_standard
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["5- to 6-year-olds"])/1000
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["7- to 8-year-olds"])/1000
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["9- to 10-year-olds"])/1000
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["Adults"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["5- to 6-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["7- to 8-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["9- to 10-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["Adults"])/1000
 
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
@@ -960,7 +964,7 @@ sum(sim_remixing_df %>% select(textsim_mean) >= mean_sim_standard["Adults"])/100
 
 
 # this is the full range of the null
-quantile(sim_remixing_df %>% select(treedist_mean) %>% unlist(), 
+quantile(sim_remixing_df %>% select(treedist_mean_normed) %>% unlist(), 
          c(0, 1))
 # true values are higher
 mean_dist
@@ -990,7 +994,7 @@ reuse.alt.kid.int <- lm(
   data = df_valid2_bypart %>% filter(AgeGroup == "Kids"))
 summary(reuse.alt.kid.int)
 lmtest::lrtest(reuse.alt.kid.int, update(reuse.alt.kid.int, . ~ . - exposure_cond_code:age_mo_center))
-
+# no interaction
 
 reuse.alt.kid <- lm(
   n_match ~ 
@@ -1000,7 +1004,7 @@ reuse.alt.kid <- lm(
   data = df_valid2_bypart %>% filter(AgeGroup == "Kids"))
 summary(reuse.alt.kid) ## main effect of age
 
-### kids vs. adults
+### kids (split) vs. adults
 reuse.alt.all.int <- lm(
   n_match ~ 
     exposure_cond_code * AgeGroup_Split +
@@ -1008,7 +1012,8 @@ reuse.alt.all.int <- lm(
     question_cond_code * AgeGroup_Split ,
   data = df_valid2_bypart)
 summary(reuse.alt.all.int)
-lmtest::lrtest(reuse.alt.all.int, update(reuse.alt.all.int, .~.-exposure_cond_code:AgeGroup_Split)) # likelihood ratio test for lm
+lmtest::lrtest(update(reuse.alt.all.int, .~.-exposure_cond_code:AgeGroup_Split),
+               reuse.alt.all.int) # likelihood ratio test for lm
 # no interaction
 
 reuse.alt.all <- lm(
@@ -1018,7 +1023,8 @@ reuse.alt.all <- lm(
     question_cond_code * AgeGroup_Split ,
   data = df_valid2_bypart)
 summary(reuse.alt.all)
-lmtest::lrtest(reuse.alt.all, update(reuse.alt.all, .~.-exposure_cond_code))
+lmtest::lrtest(update(reuse.alt.all, .~.-exposure_cond_code),
+               reuse.alt.all)
 Confint(reuse.alt.all)
 
 
@@ -1028,7 +1034,7 @@ Confint(reuse.alt.all)
 # why do people reuse less when questions are less informative?
 
 #### tree dist
-exp.trial.all.int1 <- lmer(target_dist ~ 
+exp.trial.all.int1 <- lmer(target_dist_normed ~ 
                 exposure_cond_code*trial_type_code +
                 (exposure_cond_code + 
                    quality_cond_code +

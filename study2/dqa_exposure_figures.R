@@ -75,12 +75,16 @@ p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup, color 
                     name = "Condition", labels = c("No-Exposure", "Exposure"),
                     breaks = c("baseline", "exposure")
                     ) +
-  coord_flip(ylim = c(0, 0.4)) + 
+  coord_flip(ylim = c(0, 1)) + 
   ggtitle("The Reuse Effect")
 p
 
 ##### recombination: tree edit distance
+## norm
+df_valid2$target_dist_normed <- 1-df_valid2$target_dist/max(df_valid2$target_dist, na.rm = T)
+
 df_nonmatch <- subset(df_valid2, df_valid2$target_match != 1)
+
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_nest <- df_nonmatch %>% nest(data = -id)
@@ -88,7 +92,7 @@ set.seed(4586465)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
                     group_by(AgeGroup, exposure_cond) %>% 
-                    summarize(mRemixing = mean(target_dist))) %>% 
+                    summarize(mRemixing = mean(target_dist_normed))) %>% 
   bind_rows(.id = 'boots')
 
 cis <- bs_summary %>% group_by(AgeGroup, exposure_cond) %>%
@@ -98,13 +102,13 @@ cis
 
 p2 <- ggplot() + 
   # geom_quasirandom(aes(x = AgeGroup), alpha = 0.1, dodge.width=0.8, size = 0.1) +
-  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup, y = target_dist, color = exposure_cond, group = exposure_cond),
+  stat_summary(data = df_nonmatch, mapping = aes(x = AgeGroup, y = target_dist_normed, color = exposure_cond, group = exposure_cond),
                fun.data = "mean_cl_boot",  shape = 5, size = 2,
                geom= "point", position = position_dodge(0.4)) + 
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
                 width = 0.2, position = position_dodge(0.4)) +
   theme_classic(base_size = 7) + 
-  ylab("Tree Edit Distance\nto Target Question") +
+  ylab("Grammar-Based Similarity\nto Target Question") +
   xlab("") + 
   theme(
     legend.position = "right") +
@@ -113,8 +117,8 @@ p2 <- ggplot() +
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
-  coord_flip(ylim = c(4, 11)) + xlab("Age Group") + 
-  ggtitle("The Recombination Effect\n(Tree Edit Distance)")
+  coord_flip(ylim = c(0.70, 0.90)) + xlab("Age Group") + 
+  ggtitle("The Recombination Effect\n(Grammar-Based Similarity)")
 
 p2
 
@@ -143,7 +147,7 @@ p3 <- ggplot() +
   geom_errorbar(data = cis, mapping = aes(x = AgeGroup, group = exposure_cond, color = exposure_cond, ymin = ci_lo, ymax = ci_hi), 
                 width = 0.2, position = position_dodge(0.4)) +
   theme_classic(base_size = 7) + 
-  ylab("Text-Based Semantic Similarity\nto Target Question") +
+  ylab("Text-Based Similarity\nto Target Question") +
   xlab("") + 
   theme(
     legend.position = "right") +
@@ -152,7 +156,7 @@ p3 <- ggplot() +
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
-  coord_flip(ylim = c(0.62, 0.72)) + xlab("Age Group") + 
+  coord_flip(ylim = c(0.60, 0.75)) + xlab("Age Group") + 
   ggtitle("The Recombination Effect\n(Text-Based Similarity)")
 
 p3
@@ -310,6 +314,10 @@ reuse_1 <- ggplot(sim_reuse_df) +
 reuse_1
 
 
+### norm tree edit dist ###
+df_seq_consec$dist_to_last_normed <- 1 - df_seq_consec$dist_to_last/max(df_seq_consec$dist_to_last, na.rm = T)
+# norm tree edit distance to same scale as true data
+sim_remixing_df$treedist_mean_normed <- 1 - sim_remixing_df$treedist_mean/max(df_seq_consec$dist_to_last, na.rm = T)
 
 
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == "0")
@@ -320,7 +328,7 @@ set.seed(45465)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
                     group_by(AgeGroup_Split) %>% 
-                    summarize(mRemixing = mean(dist_to_last, na.rm = TRUE))) %>% 
+                    summarize(mRemixing = mean(dist_to_last_normed, na.rm = TRUE))) %>% 
   bind_rows(.id = 'boots')
 
 cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
@@ -329,18 +337,18 @@ cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
 
 
 remixing_1 <- ggplot(sim_remixing_df) + 
-  stat_density_ridges(aes(x = treedist_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
+  stat_density_ridges(aes(x = treedist_mean_normed, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
-                      scale = 0.5,
-                      rel_min_height = .01
+                      scale = 0.015,
+                      rel_min_height = .0001
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
-               aes(x = dist_to_last, y = AgeGroup_Split, color = AgeGroup_Split), 
+               aes(x = dist_to_last_normed, y = AgeGroup_Split, color = AgeGroup_Split), 
                fun.data = "mean_cl_boot", 
                shape = 5, size = 2,
                geom= "point") +
@@ -351,9 +359,9 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("Group") + 
-  xlab("Tree Edit Distance to\nMost-Similar Previous Question") +
-  coord_cartesian(xlim = c(0, 11)) +
-  ggtitle("Across-Trial Recombination\n(Tree Edit Distance)")
+  xlab("Grammar-Based Similarity to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0.7, 1)) +
+  ggtitle("Across-Trial Recombination\n(Grammar-Based Similarity)")
 remixing_1
 
 #### text-based semantic sim
@@ -397,7 +405,7 @@ remixing_2 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Text-Based Semantic Similarity to\nMost-Similar Previous Question") +
+  xlab("Text-Based Similarity to\nMost-Similar Previous Question") +
   coord_cartesian(xlim = c(0.63, 0.8)) + 
   ggtitle("Across-Trial Recombination\n(Text-Based Similarity)")
 remixing_2
