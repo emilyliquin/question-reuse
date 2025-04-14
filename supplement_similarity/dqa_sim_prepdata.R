@@ -19,7 +19,9 @@ source_python("../monsters_pyscripts/distance.py")
 
 source_python("../monsters_pyscripts/textsim_sbert.py")
 
+
 get_intersect <- function(qp1, qp2){
+  
   qp1_split <- str_split(str_remove_all(qp1, pattern = "[\\(]|[\\)]"), pattern = " ") %>% map(~ unique(.))
   qp2_split <- str_split(str_remove_all(qp2, pattern = "[\\(]|[\\)]"), pattern = " ") %>% map(~ unique(.))
   
@@ -36,10 +38,14 @@ get_intersect <- function(qp1, qp2){
   functions_q1 <- functions_q1 %>% map(~ .[. != "lambda"])
   functions_q2 <- functions_q2 %>% map(~ .[. != "lambda"])
   
+  all_components_q1 <- list(c(arguments_q1[[1]], functions_q1[[1]]))
+  all_components_q2 <- list(c(arguments_q2[[1]], functions_q2[[1]]))
+  
   intersecting_arguments <- map2(arguments_q1, arguments_q2, \(x, y) length(intersect(x, y))/length(y)) %>% unlist()
   intersecting_functions <- map2(functions_q1, functions_q2, \(x, y) length(intersect(x, y))/length(y)) %>% unlist()
+  intersecting_all <- map2(all_components_q1, all_components_q2, \(x, y) length(intersect(x, y))/length(y)) %>% unlist()
   
-  return(c(intersecting_arguments, intersecting_functions))
+  return(c(intersecting_arguments, intersecting_functions, intersecting_all))
 }
 
 fulldf$dist_tree <- NA
@@ -49,6 +55,8 @@ fulldf$intersecting_functions12 <- NA
 fulldf$intersecting_functions21 <- NA
 fulldf$intersecting_arguments12 <- NA
 fulldf$intersecting_arguments21 <- NA
+fulldf$intersecting_all12 <- NA
+fulldf$intersecting_all21 <- NA
 
 for(i in 1:nrow(fulldf)){
   print(i)
@@ -59,11 +67,12 @@ for(i in 1:nrow(fulldf)){
   intersect_both12 <- get_intersect(as.character(fulldf[i, "q1_program"]), as.character(fulldf[i, "q2_program"]))
   fulldf[i, "intersecting_functions12"] <- intersect_both12[2]
   fulldf[i, "intersecting_arguments12"] <- intersect_both12[1]
+  fulldf[i, "intersecting_all12"] <- intersect_both12[3]
   
   intersect_both21 <- get_intersect(as.character(fulldf[i, "q2_program"]), as.character(fulldf[i, "q1_program"]))
   fulldf[i, "intersecting_functions21"] <- intersect_both21[2]
   fulldf[i, "intersecting_arguments21"] <- intersect_both21[1]
-  
+  fulldf[i, "intersecting_all21"] <- intersect_both21[3]
 }
 
 
