@@ -55,7 +55,6 @@ allhist
 # informativeness
 
 
-
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 # see https://www.r-bloggers.com/2018/08/bootstrapping-clustered-data/amp/
 # and https://www.r-bloggers.com/2013/01/the-cluster-bootstrap/amp/
@@ -103,6 +102,12 @@ sim_remixing_df <- read_csv("simulations/dqa_baseline_remixing.csv")
 
 df_seq_consec$AgeGroup <- ifelse(df_seq_consec$AgeGroup == "Kids", "Children", "Adults")
 df_seq_consec$AgeGroup <- factor(df_seq_consec$AgeGroup, levels = c("Children", "Adults"))
+
+### norm tree edit dist ###
+df_seq_consec$dist_to_last_normed <- 1 - df_seq_consec$dist_to_last/max(df_seq_consec$dist_to_last, na.rm = T)
+# norm tree edit distance to same scale as true data
+sim_remixing_df$treedist_mean_normed <- 1 - sim_remixing_df$treedist_mean/max(df_seq_consec$dist_to_last, na.rm = T)
+
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
 df_nest <- df_seq_consec %>% nest(data = -id)
@@ -159,7 +164,7 @@ set.seed(65456)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
                     group_by(AgeGroup_Split) %>% 
-                    summarize(mRemixing = mean(dist_to_last, na.rm = TRUE))) %>% 
+                    summarize(mRemixing = mean(dist_to_last_normed, na.rm = TRUE))) %>% 
   bind_rows(.id = 'boots')
 
 cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
@@ -168,18 +173,18 @@ cis <- bs_summary %>% group_by(AgeGroup_Split) %>%
 
 
 remixing_1 <- ggplot(sim_remixing_df) + 
-  stat_density_ridges(aes(x = treedist_mean, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
+  stat_density_ridges(aes(x = treedist_mean_normed, y = "Simulated null\ndistribution", fill = factor(stat(quantile))),
                       geom = "density_ridges_gradient",
                       calc_ecdf = TRUE,
                       quantiles = c(0.025, 0.975),
-                      scale = 0.5,
-                      rel_min_height = .01
+                      scale = 0.03,
+                      rel_min_height = .0001
   ) +
   scale_fill_manual(
     name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
-               aes(x = dist_to_last, y = AgeGroup_Split, color = AgeGroup_Split), 
+               aes(x = dist_to_last_normed, y = AgeGroup_Split, color = AgeGroup_Split), 
                fun.data = "mean_cl_boot", 
                shape = 5, size = 2,
                geom= "point") +
@@ -190,9 +195,9 @@ remixing_1 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("Group") + 
-  xlab("Tree Edit Distance to\nMost-Similar Previous Question") +
-  coord_cartesian(xlim = c(0, 11)) +
-  ggtitle("Across-Trial Recombination\n(Tree Edit Distance)")
+  xlab("Grammar-Based Similarity to\nMost-Similar Previous Question") +
+  coord_cartesian(xlim = c(0.5, 1)) +
+  ggtitle("Across-Trial Recombination\n(Grammar-Based Similarity)")
 remixing_1
 
 
@@ -234,7 +239,7 @@ remixing_2 <- ggplot(sim_remixing_df) +
                      name = "Age Group") + 
   theme(legend.position = "none") + 
   ylab("") + 
-  xlab("Text-Based Semantic Similarity to\nMost-Similar Previous Question") +
+  xlab("Text-Based Similarity to\nMost-Similar Previous Question") +
   coord_cartesian(xlim = c(0.63, 0.8)) + 
   ggtitle("Across-Trial Recombination\n(Text-Based Similarity)")
 remixing_2

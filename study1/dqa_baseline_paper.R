@@ -67,6 +67,7 @@ n_ambig_adults/(total_trials_adults-n_skip_adults)
 n_gram_kids <- sum(df[df$AgeGroup == "Kids", "notes"] == "not in grammar", na.rm = T)
 n_gram_adults <- sum(df[df$AgeGroup == "Adults", "notes"] == "not in grammar", na.rm = T)
 n_gram_kids
+n_gram_adults
 n_gram_adults/(total_trials_adults-n_skip_adults-n_invalid_adults-n_ambig_adults)
 
 
@@ -83,7 +84,7 @@ excl.mod.kid <- glmer(trouble_response ~ age_mo_center + (1|id) + (1|trial_index
              data = df %>% filter(AgeGroup == "Kids"),
              family = "binomial")
 summary(excl.mod.kid)
-anova(excl.mod.kid, update(excl.mod.kid, . ~ . - age_mo_center))
+anova(excl.mod.kid, update(excl.mod.kid, . ~ . - age_mo_center)) ## no effect of age in kids
 
 excl.mod.all <- glmer(trouble_response ~ AgeGroup + (1|id) + (1|trial_index), 
               data = df,
@@ -140,7 +141,8 @@ df_valid %>%
 unique.kid <- lmer(n_unique_operations ~ age_mo_center + (1|id) + (1|trial_index), 
              data = df_valid %>% filter(AgeGroup == "Kids"))
 summary(unique.kid)
-anova(unique.kid, update(unique.kid, . ~ . - age_mo_center)) ### significant effect
+anova(unique.kid, update(unique.kid, . ~ . - age_mo_center)) 
+### significant effect - split age group for main analysis
 
 #### kids (split) vs. adults
 unique.all <- lmer(n_unique_operations ~ AgeGroup_Split + (1|id) + (1|trial_index), 
@@ -169,7 +171,8 @@ df_valid %>%
 total.kid <- lmer(n_operations ~ age_mo_center + (1|id) + (1|trial_index), 
              data = df_valid %>% filter(AgeGroup == "Kids"))
 summary(total.kid)
-anova(total.kid, update(total.kid, . ~ . - age_mo_center)) # non-significant effect
+anova(total.kid, update(total.kid, . ~ . - age_mo_center)) 
+# non-significant effect - use kids vs. adults for main analysis
 
 ### kids (together) vs. adults
 total.all <- lmer(n_operations ~ AgeGroup + (1|id) + (1|trial_index), 
@@ -193,7 +196,8 @@ df_valid %>%
 eig.kid <- lmer(EIG ~ age_mo_center + (1|id) + (1|trial_index), 
              data = df_valid %>% filter(AgeGroup == "Kids"))
 summary(eig.kid)
-anova(eig.kid, update(eig.kid, . ~ . - age_mo_center)) # no effect
+anova(eig.kid, update(eig.kid, . ~ . - age_mo_center)) 
+# no effect - just kids vs. adults for main analysis
 
 ### kids vs. adults
 eig.all <- lmer(EIG ~ AgeGroup + (1|id) + (1|trial_index), 
@@ -201,7 +205,6 @@ eig.all <- lmer(EIG ~ AgeGroup + (1|id) + (1|trial_index),
 summary(eig.all)
 anova(eig.all, update(eig.all, . ~ .- AgeGroup))
 Confint(eig.all)
-
 
 
 ## ----max expected EIG---------------------------------------------------------------------
@@ -261,12 +264,12 @@ df_seq_consec$same_as_last <- as.factor(df_seq_consec$same_as_last)
 df_seq_consec %>% group_by(AgeGroup) %>%
   summarize(m = sum(same_as_last == 1)/n())
 
+### within kids
 reusetrials.kid <- glmer(same_as_last ~ age_mo_center + (1|id), 
               data = df_seq_consec %>% filter(AgeGroup == "Kids"), family = "binomial")
 summary(reusetrials.kid)
 anova(reusetrials.kid, update(reusetrials.kid, .~.-age_mo_center))
-
-
+# no effect - just kids vs. adults for main analysis
 
 reusetrials.all <- glmer(same_as_last ~ AgeGroup + (1|id), 
               data = df_seq_consec, family = "binomial")
@@ -276,15 +279,20 @@ exp(Confint(reusetrials.all))
 
 ##### trial-to-trial recombination ####
 
+## norm tree edit distance
+df_seq_consec$dist_to_last_normed <- 1 - df_seq_consec$dist_to_last/max(df_seq_consec$dist_to_last, na.rm = T)
+
+
+
 ### tree dist 
-remixtrials.kid <- lmer(dist_to_last ~ age_mo_center + (1|id), 
+remixtrials.kid <- lmer(dist_to_last_normed ~ age_mo_center + (1|id), 
                         data = df_seq_consec %>% filter(same_as_last == 0 & AgeGroup == "Kids"),
                         control = lmerControl(optimizer = "bobyqa"), REML = FALSE)
 summary(remixtrials.kid)
 anova(remixtrials.kid, update(remixtrials.kid, .~.-age_mo_center))
+# significant -- split age group for main analysis
 
-
-remixtrials.all <- lmer(dist_to_last ~ AgeGroup_Split + (1|id), 
+remixtrials.all <- lmer(dist_to_last_normed ~ AgeGroup_Split + (1|id), 
                         data = df_seq_consec %>% filter(same_as_last == 0))
 summary(remixtrials.all)
 anova(remixtrials.all, update(remixtrials.all, .~.-AgeGroup_Split))
@@ -292,17 +300,20 @@ Confint(remixtrials.all)
 
 
 stargazer(remixtrials.all, type = "text",
-          dep.var.labels = "Tree edit distance to least-distant previous question",
+          dep.var.labels = "Grammar-based similarity to most-similar previous question",
           ci = TRUE, digits = 2, digits.extra = 3, single.row = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001), omit.stat = c("aic", "bic", "ll", "n"))
 
 
 
 ### text similarity
+
+# within kids
 remixtrials.kid <- lmer(sim_to_last_standard ~ age_mo_center + (1|id), 
               data = df_seq_consec %>% filter(same_as_last == 0 & AgeGroup == "Kids"))
 summary(remixtrials.kid)
 anova(remixtrials.kid, update(remixtrials.kid, .~.-age_mo_center))
+# no effect - just kids vs adults for main analysis
 
 remixtrials.all <- lmer(sim_to_last_standard ~ AgeGroup + (1|id), 
              data = df_seq_consec %>% filter(same_as_last == 0))
@@ -316,6 +327,9 @@ Confint(remixtrials.all)
 
 sim_reuse_df <- read_csv("simulations/dqa_baseline_reuse.csv")
 sim_remixing_df <- read_csv("simulations/dqa_baseline_remixing.csv")
+
+# norm tree edit distance to same scale as true data
+sim_remixing_df$treedist_mean_normed <- 1 - sim_remixing_df$treedist_mean/max(df_seq_consec$dist_to_last, na.rm = T)
 
 
 # we've simulated 1000 new datasets, where the trial structures match the 
@@ -343,7 +357,7 @@ reuse_rates
 df_seq_consec_nonmatch <- df_seq_consec %>% filter(same_as_last == 0)
 
 ## tree edit distance 
-mean_dist <- tapply(df_seq_consec_nonmatch$dist_to_last, df_seq_consec_nonmatch$AgeGroup, mean)
+mean_dist <- tapply(df_seq_consec_nonmatch$dist_to_last_normed, df_seq_consec_nonmatch$AgeGroup_Split, mean)
 mean_dist
 
 ## text similarity, standardized
@@ -351,8 +365,11 @@ mean_sim_standard <- tapply(df_seq_consec_nonmatch$sim_to_last_standard, df_seq_
 mean_sim_standard
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["Kids"])/1000
-sum(sim_remixing_df %>% select(treedist_mean) <= mean_dist["Adults"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["5- to 6-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["7- to 8-year-olds"])/1000
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["9- to 10-year-olds"])/1000
+
+sum(sim_remixing_df %>% select(treedist_mean_normed) >= mean_dist["Adults"])/1000
 
 
 # p-value: what proportion of our bootstrapped means are as or more extreme than the observed mean?
@@ -361,7 +378,7 @@ sum(sim_remixing_df %>% select(textsim_mean) >= mean_sim_standard["Adults"])/100
 
 
 # this is the full range of the null
-sim_remixing_df %>% select(treedist_mean) %>% unlist() %>% range()
+sim_remixing_df %>% select(treedist_mean_normed) %>% unlist() %>% range()
 # true values are mostly lower
 mean_dist
 
