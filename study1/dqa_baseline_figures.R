@@ -5,7 +5,7 @@ library(ggpubr)
 library(see)
 library(ggridges)
 library(rsample)
-
+library(patchwork)
 setwd(this.path::here())
 
 
@@ -51,6 +51,14 @@ allhist <- ggplot(df_valid) +
   theme(legend.position = "bottom")
 allhist
 
+library(ggpubr)
+leg <- get_legend(allhist)
+
+# Convert to a ggplot and print
+p_legend_1 <- as_ggplot(leg)
+
+# remove legend from allhist
+allhist <- allhist + theme(legend.position = "none")
 
 # informativeness
 
@@ -85,12 +93,17 @@ p1 <- ggplot() +
   ylab("Expected Information Gain") + 
   scale_color_manual(values = c("#403F4C", "#E84855"), 
                      name = "Age Group") +
-  theme(legend.position = "bottom")
+  theme(legend.position = "none")
 p1
 
-
-ggarrange(allhist, p1, labels = c("A", "B"), align = "hv", common.legend = TRUE, legend = "bottom") %>%
+((allhist + p1) / p_legend_1 +
+  plot_annotation(tag_levels = list(c("A", 'B', ""))) + 
+  plot_layout(heights = c(10, 1)) &
+  theme(plot.tag = element_text(face = 'bold'))) %>%
   ggsave(filename = "figures/Study1_Fig_Combined.pdf", width = 5.5, height = 2.5, units = "in")
+  
+
+# ggarrange(allhist, p1, labels = c("A", "B"), align = "hv", common.legend = TRUE, legend = "bottom") 
 
 ##### reuse and remixing ####
 
@@ -132,7 +145,7 @@ reuse_1 <- ggplot(sim_reuse_df) +
                       rel_min_height = .01
   ) +
   scale_fill_manual(
-    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+    name = "Probability", values = c("#C2C2C2", "#605cfc", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec, 
                aes(x = same_as_last, y = AgeGroup, color = AgeGroup), 
@@ -181,7 +194,7 @@ remixing_1 <- ggplot(sim_remixing_df) +
                       rel_min_height = .0001
   ) +
   scale_fill_manual(
-    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+    name = "Probability", values = c("#C2C2C2", "#605cfc", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
                aes(x = dist_to_last_normed, y = AgeGroup_Split, color = AgeGroup_Split), 
@@ -245,6 +258,10 @@ remixing_2 <- ggplot(sim_remixing_df) +
 remixing_2
 
 
-library(patchwork)
-((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8))) %>%
+
+((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8)) +
+    plot_annotation(tag_levels = list(c("A", 'B', ""))) &
+    theme(plot.tag = element_text(face = 'bold'))) %>%
   ggsave(filename = "figures/Study1_ReuseRemixing.pdf", width = 5.5, height = 4, units = "in")
+
+

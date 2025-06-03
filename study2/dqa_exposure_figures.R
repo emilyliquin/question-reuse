@@ -4,6 +4,7 @@ library(ggpubr)
 library(see)
 library(ggridges)
 library(rsample)
+library(patchwork)
 
 setwd(this.path::here())
 
@@ -71,7 +72,7 @@ p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup, color 
   theme(legend.position = "right") + 
   # scale_fill_manual(values = c("#EECC66", "#6699CC"), 
   #                   name = "Match to Target Question", labels = c("Non-Match", "Match")) + 
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                     name = "Condition", labels = c("No-Exposure", "Exposure"),
                     breaks = c("baseline", "exposure")
                     ) +
@@ -113,7 +114,7 @@ p2 <- ggplot() +
   theme(
     legend.position = "right") +
   scale_x_discrete(breaks = c("Children", "Adults"), labels = c("Children", "Adults")) + 
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
@@ -152,7 +153,7 @@ p3 <- ggplot() +
   theme(
     legend.position = "right") +
   scale_x_discrete(breaks = c("Children", "Adults"), labels = c("Children", "Adults")) + 
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
@@ -161,9 +162,8 @@ p3 <- ggplot() +
 
 p3
 
-library(patchwork)
-((p / plot_spacer()/ (p2 + p3)) + plot_layout(guides = 'collect', heights = c(8, 1, 8))) %>%
-  ggsave(filename = "figures/Study2_ReuseRemixing.pdf", width = 5.5, height = 4, units = "in")
+# ((p / plot_spacer()/ (p2 + p3)) + plot_layout(guides = 'collect', heights = c(8, 1, 8))) %>%
+#   ggsave(filename = "figures/Study2_ReuseRemixing.pdf", width = 5.5, height = 4, units = "in")
 
 
 ###### reuse sensitivity to context ######
@@ -180,38 +180,48 @@ df_valid2$trial_type <- factor(df_valid2$trial_type,
 
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
-df_nest <- df_valid2 %>% filter(exposure_cond == "exposure") %>% nest(data = -id)
+df_nest <- df_valid2 %>% nest(data = -id)
 set.seed(123241)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
-                    group_by(AgeGroup, trial_type) %>% 
+                    group_by(AgeGroup, trial_type, exposure_cond) %>% 
                     summarize(mReuse = mean(target_match))) %>% 
   bind_rows(.id = 'boots')
 
-cis <- bs_summary %>% group_by(AgeGroup, trial_type) %>%
+cis <- bs_summary %>% group_by(AgeGroup, trial_type, exposure_cond) %>%
   summarize(ci_lo = quantile(mReuse, 0.025),
             ci_hi = quantile(mReuse, 0.975))
 cis
 
 
 
-p3 <- ggplot(df_valid2 %>% filter(exposure_cond == "exposure"), aes(x = trial_type)) + 
+p4 <- ggplot(df_valid2, aes(x = trial_type, color = exposure_cond)) + 
   facet_wrap(~AgeGroup, scales = "free") +
   theme_classic(base_size = 7) + 
   stat_summary(aes(y = as.numeric(as.character(target_match))), 
-               fun.data = "mean_cl_boot", geom = "point", color = "#882255",
-               shape = 5, size = 2) +
+               fun.data = "mean_cl_boot", geom = "point",
+               shape = 5, size = 2, position = position_dodge(0.6)) +
   geom_errorbar(data = cis, mapping = aes(x = trial_type, ymin = ci_lo, ymax = ci_hi), 
-                width = 0.2, position = position_dodge(0.9), color = "#882255") +
+                width = 0.2, position = position_dodge(0.6)) +
   ylab("Proportion of Questions\nMatching Target Question") +
-  xlab("Trial Type (Within Exposure Condition)") + 
-  theme(legend.position = "top") + ylim(0, 1) + 
+  xlab("Trial Type") + 
+  theme(legend.position = "right") + ylim(0, 1) + 
   coord_flip(ylim = c(0, 0.65)) +
-  ggtitle("Context-Specific Variation in Reuse")
-p3
+  ggtitle("Context-Specific Variation in Reuse") + 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
+                     name = "Condition", labels = c("No-Exposure", "Exposure"),
+                     breaks = c("baseline", "exposure"))
+p4
 
 
-ggsave(p3, filename = "figures/Study2_ReuseContext.pdf", width = 5.5, height = 2.5, units = "in")
+
+pcombo <- (p2 + p3) 
+
+(p /plot_spacer()/ p4 /plot_spacer()/ pcombo  + 
+  plot_annotation(tag_levels = list(c("A", 'B', 'C', ""))) +
+  plot_layout(guides = 'collect', heights = c(10, 1, 15, 1, 10)) &
+  theme(plot.tag = element_text(face = 'bold'))) %>%
+  ggsave(filename = "figures/Study2_ReuseRemixing.pdf", width = 5.5, height = 5.5, units = "in")
 
 
 ###### EIG #####
@@ -245,7 +255,7 @@ p2 <- ggplot(df_valid2) +
   scale_x_discrete(labels = c("Children", "Adults")) + 
   xlab("Age Group") + 
   ylab("Expected Information Gain") +
-  scale_color_manual(values = c("#0000FFA0","#882255"),
+  scale_color_manual(values = c("#605cfc","#882255"),
                      name = "Condition", labels = c("No-Exposure", "Exposure")) +
   theme(legend.position = "top") + 
   ggtitle("Question Informativeness")
@@ -294,7 +304,7 @@ reuse_1 <- ggplot(sim_reuse_df) +
                       rel_min_height = .01
   ) +
   scale_fill_manual(
-    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+    name = "Probability", values = c("#C2C2C2", "#605cfc", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec, 
                aes(x = same_as_last, y = AgeGroup_Split, color = AgeGroup_Split), 
@@ -345,7 +355,7 @@ remixing_1 <- ggplot(sim_remixing_df) +
                       rel_min_height = .0001
   ) +
   scale_fill_manual(
-    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+    name = "Probability", values = c("#C2C2C2", "#605cfc", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
                aes(x = dist_to_last_normed, y = AgeGroup_Split, color = AgeGroup_Split), 
@@ -391,7 +401,7 @@ remixing_2 <- ggplot(sim_remixing_df) +
                       rel_min_height = .01
   ) +
   scale_fill_manual(
-    name = "Probability", values = c("#C2C2C2", "#0000FFA0", "#C2C2C2")
+    name = "Probability", values = c("#C2C2C2", "#605cfc", "#C2C2C2")
   ) + theme_classic(base_size = 7) +
   stat_summary(data = df_seq_consec_nonmatch, 
                aes(x = sim_to_last_standard, y = AgeGroup, color = AgeGroup), 
@@ -411,7 +421,9 @@ remixing_2 <- ggplot(sim_remixing_df) +
 remixing_2
 
 
-((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8))) %>%
+((reuse_1 / plot_spacer()/  (remixing_1 + remixing_2)) + plot_layout(heights = c(8, 1, 8)) +
+    plot_annotation(tag_levels = list(c("A", 'B', ""))) &
+    theme(plot.tag = element_text(face = 'bold'))) %>%
   ggsave(filename = "figures/Study2_ReuseRemixing_Trials.pdf", width = 5.5, height = 4, units = "in")
 
 

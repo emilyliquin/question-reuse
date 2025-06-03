@@ -8,6 +8,7 @@ library(ggpubr)
 library(see)
 library(ggridges)
 library(rsample)
+library(patchwork)
 
 setwd(this.path::here())
 
@@ -75,7 +76,7 @@ p <- ggplot(df_valid2 %>% filter(trial_type != "zero"), aes(x = AgeGroup_Split, 
   theme(legend.position = "right") + 
   # scale_fill_manual(values = c("#EECC66", "#6699CC"), 
   #                   name = "Match to Target Question", labels = c("Non-Match", "Match")) + 
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
@@ -116,7 +117,7 @@ p2 <- ggplot() +
   xlab("") + 
   theme(
     legend.position = "right") +
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
@@ -154,7 +155,7 @@ p3 <- ggplot() +
   xlab("") + 
   theme(
     legend.position = "right") +
-  scale_color_manual(values = c("#0000FFA0", "#882255"), 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
                      name = "Condition", labels = c("No-Exposure", "Exposure"),
                      breaks = c("baseline", "exposure")
   ) +
@@ -163,9 +164,6 @@ p3 <- ggplot() +
 
 p3
 
-library(patchwork)
-((p / plot_spacer()/ (p2 + p3)) + plot_layout(guides = 'collect', heights = c(8, 1, 8))) %>%
-  ggsave(filename = "figures/Study2_ReuseRemixing_Supplement.pdf", width = 5.5, height = 4, units = "in")
 
 
 ###### reuse sensitivity to context ######
@@ -182,35 +180,48 @@ df_valid2$trial_type <- factor(df_valid2$trial_type,
 
 
 # get bootstrap 95% CIs (clustered bootstrap: sample participants, not datapoints)
-df_nest <- df_valid2 %>% filter(exposure_cond == "exposure") %>% nest(data = -id)
+df_nest <- df_valid2 %>% nest(data = -id)
 set.seed(123241)
 bs <- bootstraps(df_nest, times = 1000)
 bs_summary <- map(bs$splits, ~as_tibble(.) %>% unnest(cols = c(data)) %>% 
-                    group_by(AgeGroup_Split, trial_type) %>% 
+                    group_by(AgeGroup_Split, trial_type, exposure_cond) %>% 
                     summarize(mReuse = mean(target_match))) %>% 
   bind_rows(.id = 'boots')
 
-cis <- bs_summary %>% group_by(AgeGroup_Split, trial_type) %>%
+cis <- bs_summary %>% group_by(AgeGroup_Split, trial_type, exposure_cond) %>%
   summarize(ci_lo = quantile(mReuse, 0.025),
             ci_hi = quantile(mReuse, 0.975))
 cis
 
 
 
-p3 <- ggplot(df_valid2 %>% filter(exposure_cond == "exposure"), aes(x = trial_type)) + 
+p4 <- ggplot(df_valid2, aes(x = trial_type, color = exposure_cond)) + 
   facet_wrap(~AgeGroup_Split, scales = "free") +
   theme_classic(base_size = 7) + 
   stat_summary(aes(y = as.numeric(as.character(target_match))), 
-               fun.data = "mean_cl_boot", geom = "point", color = "#882255",
-               shape = 5, size = 2) +
+               fun.data = "mean_cl_boot", geom = "point",
+               shape = 5, size = 2, position = position_dodge(0.6)) +
   geom_errorbar(data = cis, mapping = aes(x = trial_type, ymin = ci_lo, ymax = ci_hi), 
-                width = 0.2, position = position_dodge(0.9), color = "#882255") +
+                width = 0.2, position = position_dodge(0.6)) +
   ylab("Proportion of Questions\nMatching Target Question") +
-  xlab("Trial Type (Within Exposure Condition)") + 
-  theme(legend.position = "top") + ylim(0, 1) + 
+  xlab("Trial Type") + 
+  theme(legend.position = "right") + ylim(0, 1) + 
   coord_flip(ylim = c(0, 0.65)) +
-  ggtitle("Context-Specific Variation in Reuse")
-p3
+  ggtitle("Context-Specific Variation in Reuse") + 
+  scale_color_manual(values = c("#605cfc", "#882255"), 
+                     name = "Condition", labels = c("No-Exposure", "Exposure"),
+                     breaks = c("baseline", "exposure"))
+p4
+
+pcombo <- (p2 + p3)
+
+(p /p4   + 
+    plot_annotation(tag_levels = list(c("A", 'B'))) + 
+    plot_layout(guides = 'collect', heights = c(2, 3)) &
+    theme(plot.tag = element_text(face = 'bold'))) %>%
+  ggsave(filename = "figures/Study2_Reuse_Supplement.pdf", width = 5.5, height = 5.5, units = "in")
+
+(pcombo) %>%
+  ggsave(filename = "figures/Study2_Remixing_Supplement.pdf", width = 5.5, height = 2.5, units = "in")
 
 
-ggsave(p3, filename = "figures/Study2_ReuseContext_Supplement.pdf", width = 5.5, height = 3, units = "in")
